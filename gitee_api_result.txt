@@ -1,0 +1,1 @@
+﻿PATCH_FAIL_HTTP=422 ERR={"error":{"base":["空仓库不支持设置为公开仓库"]}}
