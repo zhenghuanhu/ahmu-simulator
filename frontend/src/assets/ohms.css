@@ -29,6 +29,17 @@ html, body, #app {
   margin: 0;
   padding: 0;
   height: 100%;
+  cursor: url('./cursor-crosshair.png') 16 16, crosshair;
+}
+
+/* 全局统一使用准星光标（OHMS 机载维护系统风格） */
+* {
+  cursor: url('./cursor-crosshair.png') 16 16, crosshair !important;
+}
+
+input, textarea, [contenteditable],
+.el-input__inner, .el-textarea__inner {
+  cursor: url('./cursor-crosshair.png') 16 16, text !important;
 }
 
 /* ---------- Element Plus 全局覆盖 ---------- */
