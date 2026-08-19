@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+backend/venv/
+backend/.venv/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+
+# 数据库与二进制缓存
+*.db
+*.sqlite3
+*.msgpack
+backend/*.db
+
+# 日志
+logs/
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db

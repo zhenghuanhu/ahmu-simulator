@@ -1,0 +1,11 @@
+# AHMU Simulator Backend Dependencies
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+pydantic==2.13.4
+sqlalchemy==2.0.52
+msgpack==1.2.1
+loguru==0.7.3
+apscheduler==3.11.3
+python-multipart==0.0.32
+aiofiles==25.1.0
+jinja2==3.1.6

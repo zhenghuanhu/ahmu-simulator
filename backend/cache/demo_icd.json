@@ -1,0 +1,1444 @@
+{
+  "messages": [
+    {
+      "message_id": "MEM001-DB01-FAULT_REPORT",
+      "member_system": "MEM001",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 2,
+      "port_id": 1,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM001-DB01-STATUS_PARAM",
+      "member_system": "MEM001",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 1,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM002-DB01-FAULT_REPORT",
+      "member_system": "MEM002",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 3,
+      "port_id": 2,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM002-DB01-STATUS_PARAM",
+      "member_system": "MEM002",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 2,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM003-DB01-FAULT_REPORT",
+      "member_system": "MEM003",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 4,
+      "port_id": 3,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM003-DB01-STATUS_PARAM",
+      "member_system": "MEM003",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 3,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM004-DB01-FAULT_REPORT",
+      "member_system": "MEM004",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 5,
+      "port_id": 4,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM004-DB01-STATUS_PARAM",
+      "member_system": "MEM004",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 4,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM005-DB01-FAULT_REPORT",
+      "member_system": "MEM005",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 6,
+      "port_id": 5,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM005-DB01-STATUS_PARAM",
+      "member_system": "MEM005",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 5,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM006-DB01-FAULT_REPORT",
+      "member_system": "MEM006",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 7,
+      "port_id": 6,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM006-DB01-STATUS_PARAM",
+      "member_system": "MEM006",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 6,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM007-DB01-FAULT_REPORT",
+      "member_system": "MEM007",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 8,
+      "port_id": 7,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM007-DB01-STATUS_PARAM",
+      "member_system": "MEM007",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 7,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM008-DB01-FAULT_REPORT",
+      "member_system": "MEM008",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 9,
+      "port_id": 8,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM008-DB01-STATUS_PARAM",
+      "member_system": "MEM008",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 8,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM009-DB01-FAULT_REPORT",
+      "member_system": "MEM009",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 10,
+      "port_id": 9,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM009-DB01-STATUS_PARAM",
+      "member_system": "MEM009",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 9,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM010-DB01-FAULT_REPORT",
+      "member_system": "MEM010",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 1,
+      "port_id": 10,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM010-DB01-STATUS_PARAM",
+      "member_system": "MEM010",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 10,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM011-DB01-FAULT_REPORT",
+      "member_system": "MEM011",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 2,
+      "port_id": 11,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM011-DB01-STATUS_PARAM",
+      "member_system": "MEM011",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 11,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM012-DB01-FAULT_REPORT",
+      "member_system": "MEM012",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 3,
+      "port_id": 12,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM012-DB01-STATUS_PARAM",
+      "member_system": "MEM012",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 12,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM013-DB01-FAULT_REPORT",
+      "member_system": "MEM013",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 4,
+      "port_id": 13,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM013-DB01-STATUS_PARAM",
+      "member_system": "MEM013",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 13,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM014-DB01-FAULT_REPORT",
+      "member_system": "MEM014",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 5,
+      "port_id": 14,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM014-DB01-STATUS_PARAM",
+      "member_system": "MEM014",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 14,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM015-DB01-FAULT_REPORT",
+      "member_system": "MEM015",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 6,
+      "port_id": 15,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM015-DB01-STATUS_PARAM",
+      "member_system": "MEM015",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 15,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM016-DB01-FAULT_REPORT",
+      "member_system": "MEM016",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 7,
+      "port_id": 16,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM016-DB01-STATUS_PARAM",
+      "member_system": "MEM016",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 16,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM017-DB01-FAULT_REPORT",
+      "member_system": "MEM017",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 8,
+      "port_id": 17,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM017-DB01-STATUS_PARAM",
+      "member_system": "MEM017",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 17,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM018-DB01-FAULT_REPORT",
+      "member_system": "MEM018",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 9,
+      "port_id": 18,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM018-DB01-STATUS_PARAM",
+      "member_system": "MEM018",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 18,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM019-DB01-FAULT_REPORT",
+      "member_system": "MEM019",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 10,
+      "port_id": 19,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM019-DB01-STATUS_PARAM",
+      "member_system": "MEM019",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 19,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    },
+    {
+      "message_id": "MEM020-DB01-FAULT_REPORT",
+      "member_system": "MEM020",
+      "database_name": "DB01",
+      "frame_name": "FAULT_REPORT",
+      "protocol": "A664",
+      "vl_id": 1,
+      "port_id": 20,
+      "signals": [
+        {
+          "name": "fault_code",
+          "bit_offset": 0,
+          "bit_length": 16,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 9999
+        },
+        {
+          "name": "severity",
+          "bit_offset": 16,
+          "bit_length": 4,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "uint",
+          "min_val": 0,
+          "max_val": 3
+        },
+        {
+          "name": "flight_segment",
+          "bit_offset": 24,
+          "bit_length": 8,
+          "resolution": 1.0,
+          "unit": "",
+          "data_type": "int",
+          "min_val": -128,
+          "max_val": 127
+        }
+      ]
+    },
+    {
+      "message_id": "MEM020-DB01-STATUS_PARAM",
+      "member_system": "MEM020",
+      "database_name": "DB01",
+      "frame_name": "STATUS_PARAM",
+      "protocol": "A429",
+      "label_id": 20,
+      "signals": [
+        {
+          "name": "temperature",
+          "bit_offset": 11,
+          "bit_length": 11,
+          "resolution": 0.1,
+          "offset": -50.0,
+          "unit": "C",
+          "data_type": "float",
+          "min_val": -50,
+          "max_val": 150
+        },
+        {
+          "name": "voltage",
+          "bit_offset": 22,
+          "bit_length": 8,
+          "resolution": 0.1,
+          "unit": "V",
+          "data_type": "float",
+          "min_val": 0,
+          "max_val": 30
+        }
+      ]
+    }
+  ]
+}
