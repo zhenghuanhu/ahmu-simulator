@@ -1,22 +1,34 @@
 <template>
   <div class="login-container">
-    <div class="login-box">
-      <div class="login-title">AHMU 仿真器</div>
-      <div class="login-subtitle">OHMS 地面人机界面</div>
-      <el-form :model="form" @keyup.enter="handleLogin">
-        <el-form-item>
-          <el-input v-model="form.username" placeholder="用户名 (TEST)" size="large" />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.password" type="password" placeholder="密码 (123456)" size="large" show-password />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" size="large" style="width: 100%" @click="handleLogin" :loading="loading">
-            登 录
-          </el-button>
-        </el-form-item>
-      </el-form>
-      <div class="login-hint">默认账号: TEST / 123456</div>
+    <!-- 右上角飞机准星标志 -->
+    <div class="corner-marker">
+      <svg viewBox="0 0 60 60" width="48" height="48">
+        <line x1="30" y1="5" x2="30" y2="20" stroke="#ffffff" stroke-width="3" />
+        <line x1="30" y1="40" x2="30" y2="55" stroke="#ffffff" stroke-width="3" />
+        <line x1="5" y1="30" x2="20" y2="30" stroke="#ffffff" stroke-width="3" />
+        <line x1="40" y1="30" x2="55" y2="30" stroke="#ffffff" stroke-width="3" />
+        <circle cx="30" cy="30" r="4" fill="none" stroke="#ffffff" stroke-width="2" />
+      </svg>
+    </div>
+
+    <div class="login-panel">
+      <h1 class="login-title">Onboard Maintenance System</h1>
+
+      <div class="login-field">
+        <label>Username</label>
+        <input v-model="form.username" type="text" @keyup.enter="handleLogin" />
+      </div>
+
+      <div class="login-field">
+        <label>Password</label>
+        <input v-model="form.password" type="password" @keyup.enter="handleLogin" />
+      </div>
+
+      <div class="login-actions">
+        <button class="ohms-btn" :disabled="loading" @click="handleLogin">
+          {{ loading ? 'Logging in...' : 'Login' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -32,7 +44,7 @@ const form = reactive({ username: 'TEST', password: '123456' })
 
 const handleLogin = async () => {
   if (!form.username || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
+    ElMessage.warning('Please enter username and password')
     return
   }
   loading.value = true
@@ -45,13 +57,13 @@ const handleLogin = async () => {
     if (data.status === 'ok') {
       localStorage.setItem('ahmu_token', data.token)
       localStorage.setItem('ahmu_user', data.user)
-      ElMessage.success('登录成功')
+      ElMessage.success('Login successful')
       router.push('/dashboard')
     } else {
-      ElMessage.error(data.message || '登录失败')
+      ElMessage.error(data.message || 'Login failed')
     }
   } catch (e) {
-    ElMessage.error('网络错误, 请确认后端服务已启动')
+    ElMessage.error('Network error, please confirm backend service is running')
   } finally {
     loading.value = false
   }
@@ -61,42 +73,91 @@ const handleLogin = async () => {
 <style scoped>
 .login-container {
   height: 100vh;
+  width: 100vw;
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, #001122 0%, #000000 70%);
+  position: relative;
 }
 
-.login-box {
-  width: 380px;
-  padding: 40px;
-  background: rgba(10, 10, 10, 0.9);
-  border: 1px solid #00ffff44;
-  border-radius: 8px;
-  box-shadow: 0 0 30px rgba(0, 255, 255, 0.1);
+.corner-marker {
+  position: absolute;
+  top: 30px;
+  right: 40px;
+}
+
+.login-panel {
+  width: 420px;
+  background: #222222;
+  border: 2px solid #888888;
+  padding: 36px 40px;
+  box-shadow: 0 0 0 1px #000000;
 }
 
 .login-title {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: normal;
   text-align: center;
-  color: #00ffff;
-  font-size: 26px;
-  font-weight: bold;
-  letter-spacing: 6px;
-  margin-bottom: 8px;
+  margin: 0 0 32px 0;
+  letter-spacing: 1px;
+  font-family: 'Consolas', 'Courier New', monospace;
 }
 
-.login-subtitle {
-  text-align: center;
-  color: #aaaaaa;
+.login-field {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.login-field label {
+  color: #ffffff;
+  width: 90px;
   font-size: 14px;
-  margin-bottom: 32px;
-  letter-spacing: 2px;
+  font-family: 'Consolas', 'Courier New', monospace;
 }
 
-.login-hint {
-  text-align: center;
-  color: #666;
-  font-size: 12px;
-  margin-top: 12px;
+.login-field input {
+  flex: 1;
+  background: #000000;
+  border: 1px solid #888888;
+  color: #ffffff;
+  padding: 6px 10px;
+  font-size: 14px;
+  outline: none;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.login-field input:focus {
+  border-color: #ffffff;
+}
+
+.login-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.ohms-btn {
+  background: #666666;
+  border: 2px solid #888888;
+  color: #ffffff;
+  padding: 6px 28px;
+  font-size: 14px;
+  cursor: pointer;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.ohms-btn:hover:not(:disabled) {
+  background: #999999;
+  color: #000000;
+}
+
+.ohms-btn:disabled {
+  background: #444444;
+  color: #999999;
+  cursor: not-allowed;
 }
 </style>

@@ -223,10 +223,10 @@ onMounted(() => {
 
 .state-node {
   padding: 8px 16px;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #666;
+  border: 1px solid #888888;
+  color: #888888;
   font-size: 13px;
+  background: #000000;
 }
 
 .state-node.active {
@@ -236,7 +236,7 @@ onMounted(() => {
 }
 
 .state-node.passed {
-  border-color: #00ff0066;
+  border-color: #00ff00;
   color: #00ff00;
 }
 

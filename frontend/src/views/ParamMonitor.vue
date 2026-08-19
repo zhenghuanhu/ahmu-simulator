@@ -124,15 +124,14 @@ onMounted(() => {
 
 <style scoped>
 .param-card {
-  background: #0a0a0a;
-  border: 1px solid #222;
+  background: #000000;
+  border: 1px solid #888888;
   padding: 12px;
-  border-radius: 4px;
   text-align: center;
 }
 
 .param-card.border-danger {
-  border-color: #ff333366;
+  border-color: #ff3333;
 }
 
 .param-value {

@@ -205,10 +205,9 @@ onMounted(() => {
 }
 
 .param-item {
-  background: #0a0a0a;
-  border: 1px solid #222;
+  background: #000000;
+  border: 1px solid #888888;
   padding: 10px;
-  border-radius: 4px;
   text-align: center;
 }
 
