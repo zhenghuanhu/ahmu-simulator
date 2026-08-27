@@ -15,6 +15,14 @@ frontend/node_modules/
 *.msgpack
 backend/*.db
 
+# SQLite 运行时文件 (WAL 模式)
+*.db-shm
+*.db-wal
+*.db-journal
+
+# 前端构建产物
+frontend/dist/
+
 # 日志
 logs/
 *.log

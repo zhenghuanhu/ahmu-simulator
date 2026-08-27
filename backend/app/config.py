@@ -50,18 +50,19 @@ SIMULATION_CONFIG = {
     "max_terminals": 5,              # 最大终端接入数
 }
 
-# 维护模式条件
+# 维护模式条件 (三者同时满足且持续超过30s)
+#   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {
-    "ground_test_switch": True,       # Switch_Ground_Test
-    "all_gear_wow": True,            # All_Gear_WOW (Weight on Wheels)
-    "voted_calibrated_airspeed": 70,  # ≤70kts
+    "all_gear_wow": True,            # All_Gear_WOW (轮载, True=地)
+    "voted_calibrated_airspeed": 80,  # 空速低于80kts
     "hold_duration_sec": 30,          # 条件持续≥30s
 }
 
-# 正常模式条件
+# 正常模式条件 (三者同时满足)
+#   "空/地"信号=空 (All_Gear_WOW=False) / 空速>80kts / 维护开关=正常
 NORMAL_MODE_CONDITIONS = {
     "air_ground": "air",              # 空/地=空
-    "airspeed": 90,                   # ≥90kts
+    "airspeed": 80,                   # 空速大于80kts
     "maintenance_switch": "normal",   # 维护开关=正常
 }
 

@@ -102,7 +102,7 @@ class ConfigReport(Base):
 
 
 class LifecycleData(Base):
-    """生命周期数据表 - 支持200个成员系统批量获取"""
+    """生命周期数据表 (旧版, 保留兼容)"""
     __tablename__ = "lifecycle_data"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -111,6 +111,34 @@ class LifecycleData(Base):
     power_cycle_count = Column(Integer, default=0)   # 上电循环计数
     last_retrieved = Column(DateTime, default=datetime.utcnow, index=True)
     retrieval_status = Column(String(20), default="success")  # success/failed/timeout
+
+
+class TCEquipment(Base):
+    """时间周期(生命周期)设备表
+    对应机载航电 MEMBER_SYSTEM + SYS_LRU + MEMBER_SYSTEM_DF 数据结构
+    支持ATA分类查询、设备列表查询、时间周期状态查询
+    """
+    __tablename__ = "tc_equipments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    equip_id = Column(String(50), nullable=False, index=True)       # 设备ID (如 LRU001)
+    equip_name = Column(String(100))                                  # 设备名称
+    ata_code = Column(String(10), index=True)                         # ATA章节号 (如 "21")
+    ata_name = Column(String(100))                                    # ATA章节名称
+    member_system = Column(String(50), index=True)                   # 关联成员系统 (如 MEM001)
+    ip_address = Column(String(50))                                   # IP地址
+    rx_port = Column(Integer, default=0)                              # 接收端口
+    tx_port = Column(Integer, default=0)                             # 发送端口
+    is_available = Column(Integer, default=1)                         # 可用性: 0=异常 1=可获取 2=不可点击
+    power_on_time = Column(Integer, default=0)                        # 上电运行时间(秒)
+    power_cycle_count = Column(Integer, default=0)                    # 上电循环计数
+    status_string = Column(String(20))                                # 状态字符串 "HH:MM:SS"
+    last_retrieved = Column(DateTime, nullable=True, index=True)     # 最近获取时间
+    retrieval_status = Column(String(20), default="pending")          # pending/success/failed/timeout
+
+    __table_args__ = (
+        Index("idx_tc_ata_equip", "ata_code", "equip_id"),
+    )
 
 
 class ParamSnapshot(Base):

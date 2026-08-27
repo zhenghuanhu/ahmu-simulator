@@ -63,6 +63,58 @@ async def get_mode():
     return maintenance_service.get_mode_info()
 
 
+@router.post("/system/maintenance-switch")
+async def set_maintenance_switch(position: str = "ground_test"):
+    """设置维护开关位置 (ground_test / normal / data_load)
+    切换到 ground_test 后, 满足条件持续30s自动进入维护模式
+    """
+    result = maintenance_service.set_switch(position)
+    await ws_manager.broadcast("switch_changed", {
+        "switch": position,
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+    return result
+
+
+@router.post("/system/force-mode")
+async def force_system_mode(mode: str = "maintenance"):
+    """强制切换系统模式 (测试用)"""
+    result = maintenance_service.force_mode(mode)
+    await ws_manager.broadcast("mode_change", {
+        "mode": mode,
+        "previous": result.get("previous"),
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+    return result
+
+
+@router.get("/system/signals")
+async def get_signals():
+    """获取当前模拟ARINC664离散量信号状态 (含模式判定条件明细与30s计时进度)"""
+    return maintenance_service.get_mode_info()
+
+
+@router.post("/system/signals")
+async def set_signals(payload: dict):
+    """设置模拟信号 (模拟RDCU转换后的ARINC664离散量消息)
+
+    支持测试用例信号名 (与机载航电资料一致):
+    - Switch_Ground_Test / Switch_Data_Load / Switch_Normal: 维护开关 (互斥)
+    - All_Gear_WOW: 轮载信号 (True=地, False=空)
+    - Voted_Calibrated_Airspeed: 校准空速 (kts)
+    - switch_valid / wow_valid / airspeed_valid: 信号有效性
+
+    示例: {"Switch_Data_Load": true, "All_Gear_WOW": true, "Voted_Calibrated_Airspeed": 80}
+    """
+    result = maintenance_service.set_signals(payload)
+    await ws_manager.broadcast("signals_changed", {
+        "signals": maintenance_service.signals,
+        "result": result,
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+    return result
+
+
 # ==================== 故障诊断 ====================
 
 @router.get("/fault/reports")
@@ -193,17 +245,53 @@ async def batch_verify_config(count: int = 400, db: Session = Depends(get_db)):
     return config_service.batch_verify(db, count)
 
 
-# ==================== 生命周期 ====================
+# ==================== 生命周期 (时间周期) ====================
 
-@router.post("/lifecycle/retrieve/{member}")
-async def retrieve_lifecycle(member: str):
-    """获取单个成员系统生命周期"""
-    return await lifecycle_service.retrieve_lifecycle(member)
+@router.get("/lifecycle/atas")
+async def get_tc_atas(
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+):
+    """获取ATA分类列表 (对应 message 2306: TCATAsRequest)"""
+    return lifecycle_service.get_tcatas(page, size)
+
+
+@router.get("/lifecycle/equips")
+async def get_tc_equips(
+    ata: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(16, ge=1, le=100),
+):
+    """获取设备列表 (对应 message 2307: TCEquipsRequest)
+    ata: ATA章节号, 如 "21". 不传则返回全部
+    """
+    return lifecycle_service.get_tc_equips(ata, page, size)
+
+
+@router.get("/lifecycle/status")
+async def get_tc_status(
+    page: int = Query(1, ge=1),
+    size: int = Query(2000, ge=1, le=5000),
+    sortClass: int = Query(1, ge=1, le=2),
+    sortType: int = Query(1, ge=1, le=2),
+):
+    """获取时间周期状态列表 (对应 message 2305: TCStatusRequest)
+    status字段含':'表示时间格式(HH:MM:SS), 即获取成功
+    """
+    return lifecycle_service.get_tc_status(page, size, sortClass, sortType)
+
+
+@router.post("/lifecycle/retrieve/{equip_id}")
+async def trigger_tc_retrieval(equip_id: str):
+    """触发单个设备时间周期获取 (对应 tcRetrieval + TimeCycle_MS)
+    模拟ARINC A429/A664通信: 发送获取命令 → 成员系统响应 → 更新数据
+    """
+    return await lifecycle_service.trigger_retrieval(equip_id)
 
 
 @router.post("/lifecycle/batch-retrieve")
 async def batch_retrieve_lifecycle(count: int = 200):
-    """批量获取生命周期 (200个成员系统)"""
+    """批量获取时间周期 (200个成员系统)"""
     return await lifecycle_service.batch_retrieve(count)
 
 
