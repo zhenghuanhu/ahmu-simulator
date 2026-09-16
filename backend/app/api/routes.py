@@ -20,6 +20,7 @@ from app.services.lifecycle import lifecycle_service
 from app.services.acars import acars_service
 from app.services.print_mgr import print_service
 from app.services.engine_trim import engine_trim_service
+from app.services.nvm_reset import nvm_reset_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -400,3 +401,80 @@ async def get_trim_data(engine_id: Optional[int] = None):
 async def get_trim_status():
     """查询配平功能整体状态"""
     return engine_trim_service.get_trim_status()
+
+
+# ==================== 数据重置管理 (4.3.10) ====================
+
+@router.get("/nvm-reset/members")
+async def get_nvm_reset_members():
+    """查询启用 NVM 重置服务的成员系统列表"""
+    return nvm_reset_service.get_enabled_members()
+
+
+@router.post("/nvm-reset/reload-config")
+async def reload_nvm_reset_config():
+    """重新加载 NVM 重置配置文件"""
+    return nvm_reset_service.reload_config()
+
+
+@router.post("/nvm-reset/reset")
+async def reset_member_system(payload: dict):
+    """发起单个成员系统 NVM 数据重置 (仅维护模式)
+
+    请求体示例:
+      {"member_system": "MEM001", "reset_type": "full", "operator": "TEST"}
+    """
+    member_system = payload.get("member_system", "")
+    reset_type = payload.get("reset_type", "full")
+    operator = payload.get("operator", "TEST")
+    return await nvm_reset_service.reset_member_system(
+        member_system, reset_type, operator)
+
+
+@router.post("/nvm-reset/batch-reset")
+async def batch_reset_member_systems(payload: dict):
+    """批量重置多个成员系统 NVM 数据 (仅维护模式)
+
+    请求体示例:
+      {"member_systems": ["MEM001", "MEM002"], "reset_type": "full", "operator": "TEST"}
+    """
+    member_systems = payload.get("member_systems", [])
+    reset_type = payload.get("reset_type", "full")
+    operator = payload.get("operator", "TEST")
+    return await nvm_reset_service.batch_reset(member_systems, reset_type, operator)
+
+
+@router.get("/nvm-reset/logs")
+async def get_nvm_reset_logs(
+    member_system: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询 NVM 重置日志 (可按成员系统/状态筛选)"""
+    return nvm_reset_service.get_reset_logs(db, member_system, status, page, size)
+
+
+@router.get("/nvm-reset/results")
+async def get_nvm_reset_results(
+    reset_id: Optional[str] = None,
+    member_system: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询 NVM 重置结果"""
+    return nvm_reset_service.get_reset_results(db, reset_id, member_system, page, size)
+
+
+@router.post("/nvm-reset/print/{reset_id}")
+async def print_nvm_reset_result(reset_id: str):
+    """打印 NVM 重置操作结果 (发送至信息系统打印机)"""
+    return await nvm_reset_service.print_reset_result(reset_id)
+
+
+@router.get("/nvm-reset/status")
+async def get_nvm_reset_status():
+    """查询数据重置管理功能整体状态"""
+    return nvm_reset_service.get_reset_status()

@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
     from app.services.acars import acars_service
     from app.services.print_mgr import print_service
     from app.services.engine_trim import engine_trim_service
+    from app.services.nvm_reset import nvm_reset_service
 
     await fault_service.start()
     await param_service.start()
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI):
     await acars_service.start()
     await print_service.start()
     await engine_trim_service.start()
+    await nvm_reset_service.start()
 
     logger.info("=" * 60)
     logger.info("AHMU 仿真器启动完成!")
@@ -101,6 +103,7 @@ async def lifespan(app: FastAPI):
     await acars_service.stop()
     await print_service.stop()
     await engine_trim_service.stop()
+    await nvm_reset_service.stop()
 
     await hardware.shutdown()
     shm_channel.close()

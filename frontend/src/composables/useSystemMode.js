@@ -17,8 +17,8 @@ export function setSystemMode(mode) {
   }
 }
 
-/** 维护模式下允许访问的页面 (仅地面测试与数据加载) */
-export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload']
+/** 维护模式下允许访问的页面 (地面测试 / 数据加载 / 数据重置 NVM+故障历史) */
+export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset']
 
 /**
  * 两种模式下始终可访问的页面 (跨模式业务)

@@ -6,6 +6,7 @@
       <span class="status-dot" :class="printerStatus === 'ready' ? 'green' : printerStatus === 'busy' ? 'yellow' : 'red'"></span>
       <span :class="printerStatusClass">{{ printerStatusText }}</span>
       <span style="flex: 1;"></span>
+      <span class="ohms-dim" style="font-size: 12px;">电子盘打印目录：{{ printDir }}</span>
       <el-select v-model="printType" style="width: 160px;">
         <el-option label="文件传输模式" value="file_transfer" />
         <el-option label="块传输模式" value="block_transfer" />
@@ -38,12 +39,18 @@
           </template>
         </el-table-column>
         <el-table-column prop="content" label="内容" min-width="200" />
-        <el-table-column prop="status" label="状态" width="90">
+        <el-table-column prop="status" label="状态" width="110">
           <template #default="{ row }">
             <span :class="jobStatusClass(row.status)">{{ jobStatusText(row.status) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="printer_status" label="打印机" width="90" />
+        <el-table-column prop="file_path" label="输出文件 (ps)" min-width="200">
+          <template #default="{ row }">
+            <span v-if="row.file_path" class="ohms-cyan" style="font-size: 12px;">{{ row.file_path }}</span>
+            <span v-else class="ohms-dim">--</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="提交时间" width="160">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
@@ -66,6 +73,7 @@ const printType = ref('file_transfer')
 const printContent = ref('')
 const activePrint = ref(null)
 const printProgress = ref(0)
+const printDir = ref('A:\\printlog')
 
 const printerStatusText = computed(() => ({
   ready: '就绪 (SDI=000, Code=000)',
@@ -109,6 +117,7 @@ const fetchJobs = () => {
     .then(r => r.json())
     .then(data => {
       jobs.value = data.items || []
+      if (data.print_dir) printDir.value = data.print_dir
     })
     .finally(() => { loading.value = false })
 }
@@ -128,8 +137,8 @@ const jobStatusClass = (s) => ({
 })
 
 const jobStatusText = (s) => ({
-  completed: '完成',
-  failed: '失败',
+  completed: 'Successful',
+  failed: 'Failed',
   sending: '发送中',
   queued: '排队',
 }[s] || s)

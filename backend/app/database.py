@@ -9,6 +9,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from datetime import datetime
 import uuid
+from loguru import logger
 
 from app.config import DATABASE_URL, LOG_DIR
 
@@ -43,6 +44,29 @@ def get_db():
 def init_database():
     """初始化数据库, 创建所有表"""
     Base.metadata.create_all(bind=engine)
+    _migrate_schema()
+
+
+def _migrate_schema():
+    """轻量 schema 迁移: 为已有表补充后加列 (SQLite 的 create_all 不会更新已有表)"""
+    migrations = {
+        "print_jobs": {
+            "file_path": "VARCHAR(300)",
+        },
+    }
+    try:
+        with engine.connect() as conn:
+            for table, cols in migrations.items():
+                existing = {row[1] for row in conn.execute(
+                    text(f"PRAGMA table_info({table})"))}
+                for col_name, col_type in cols.items():
+                    if col_name not in existing:
+                        conn.execute(text(
+                            f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
+                        logger.info(f"schema 迁移: {table}.{col_name} 已添加")
+                conn.commit()
+    except Exception as e:
+        logger.warning(f"schema 迁移跳过 (可能表尚未创建): {e}")
 
 
 # ==================== ORM Models ====================
@@ -277,6 +301,7 @@ class PrintJob(Base):
     content = Column(Text)
     status = Column(String(20), default="queued")  # queued/sending/completed/failed
     printer_status = Column(String(20), default="ready")  # ready/busy/open/error
+    file_path = Column(String(300), nullable=True)  # 打印输出文件路径 (电子盘 ps 文件)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
@@ -348,4 +373,52 @@ class EngineTrimData(Base):
 
     __table_args__ = (
         Index("idx_trim_data_engine_time", "engine_id", "timestamp"),
+    )
+
+
+class NVMResetLog(Base):
+    """NVM 数据重置日志表 (4.3.10 数据重置管理)
+
+    记录每次 NVM 重置操作的操作日志 (操作时间/操作用户/被操作的设备/操作状态),
+    以及重置操作的最终结果概要。
+    状态机: pending -> sending -> waiting_ack -> success/failed/timeout
+    """
+    __tablename__ = "nvm_reset_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    reset_id = Column(String(50), nullable=False, index=True)       # 业务重置号 (如 NVM-20260916-0001)
+    member_system = Column(String(50), nullable=False, index=True)  # 被重置的成员系统
+    reset_type = Column(String(20), default="full")                 # full/partial (全量/部分重置)
+    status = Column(String(20), default="pending", index=True)      # pending/sending/waiting_ack/success/failed/timeout
+    operator = Column(String(50), default="TEST")                   # 操作用户
+    result_code = Column(String(20), nullable=True)                 # 成员系统返回的结果码 (0=成功)
+    result_message = Column(String(200), nullable=True)             # 成员系统返回的结果描述
+    error_message = Column(Text, nullable=True)                     # 失败/超时原因
+    started_at = Column(DateTime, default=datetime.utcnow)          # 重置开始时间
+    completed_at = Column(DateTime, nullable=True)                  # 重置完成时间
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_nvm_reset_member_status", "member_system", "status"),
+    )
+
+
+class NVMResetResult(Base):
+    """NVM 数据重置结果表 (4.3.10 数据重置管理)
+
+    存储成员系统返回的 NVM 数据重置结果 (与重置日志关联)
+    """
+    __tablename__ = "nvm_reset_results"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    reset_id = Column(String(50), nullable=False, index=True)       # 关联的重置号
+    member_system = Column(String(50), nullable=False, index=True)  # 成员系统
+    result_code = Column(String(20), nullable=False)                # 结果码 ("0"=成功, 非0=失败)
+    result_message = Column(String(200))                            # 结果描述
+    nvm_checksum = Column(String(64), nullable=True)                # 重置后 NVM 校验和 (模拟)
+    reset_duration_ms = Column(Integer, default=0)                  # 重置耗时 (毫秒)
+    received_at = Column(DateTime, default=datetime.utcnow, index=True)  # 结果接收时间
+
+    __table_args__ = (
+        Index("idx_nvm_reset_result_resetid", "reset_id"),
     )

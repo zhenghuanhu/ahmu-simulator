@@ -20,6 +20,9 @@ backend/*.db
 *.db-wal
 *.db-journal
 
+# 运行时数据 (数据库/打印输出 ps 文件)
+backend/data/
+
 # 前端构建产物
 frontend/dist/
 

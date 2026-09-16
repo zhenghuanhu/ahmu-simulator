@@ -3,17 +3,20 @@
 - ARINC744A协议状态机仿真
 - 文件传输/块传输模式
 - 打印机状态监控
+- 打印结果输出至电子盘 (生成 ps 格式文件, 模拟 A:\\printlog)
 """
 import asyncio
 import random
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from pathlib import Path
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, PrintJob
 from app.core.websocket_manager import ws_manager
+from app.config import PRINT_CONFIG, DATA_DIR
 
 
 class PrintState(str, Enum):
@@ -31,6 +34,21 @@ class PrintService:
     def __init__(self):
         self._running = False
         self._printer_status = "ready"  # ready / busy / open / error
+        # 打印输出目录 (模拟电子盘 A:\printlog)
+        self._print_dir = DATA_DIR / PRINT_CONFIG.get("output_dir", "printlog")
+        self._file_ext = PRINT_CONFIG.get("file_extension", "ps")
+        self._simulated_drive = PRINT_CONFIG.get("simulated_drive", "A:\\printlog")
+        self._print_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def print_dir(self) -> str:
+        """模拟电子盘路径 (展示用)"""
+        return self._simulated_drive
+
+    @property
+    def print_dir_real(self) -> str:
+        """打印文件实际输出目录"""
+        return str(self._print_dir)
 
     async def start(self):
         self._running = True
@@ -80,7 +98,11 @@ class PrintService:
 
             # 2. 等待CTS (Clear To Send)
             await self._update_print_status(job_id, PrintState.WAITING_CTS, "sending")
-            # 检查打印机状态
+            # 检查打印机状态: 非 ready 时等待打印机就绪 (最多 3s), 超时仍非就绪才失败
+            wait_rounds = 0
+            while self._printer_status != "ready" and wait_rounds < 6:
+                await asyncio.sleep(0.5)
+                wait_rounds += 1
             if self._printer_status != "ready":
                 await self._update_print_status(job_id, PrintState.FAILED, "failed")
                 await ws_manager.broadcast("print_failed", {
@@ -111,18 +133,23 @@ class PrintService:
                 await asyncio.sleep(0.5)
 
             # 4. 完成
-            await self._update_print_status(job_id, PrintState.COMPLETED, "completed")
+            # 生成 ps 格式打印文件, 输出到电子盘 (内容与打印报告一致)
+            file_path = self._generate_ps_file(job_id, content)
+
+            await self._update_print_status(job_id, PrintState.COMPLETED, "completed", file_path)
             await ws_manager.broadcast("print_completed", {
                 "job_id": job_id,
+                "file_path": file_path,
                 "timestamp": datetime.utcnow().isoformat(),
             })
-            logger.info(f"打印任务完成: {job_id}")
+            logger.info(f"打印任务完成: {job_id}, 输出文件: {file_path}")
 
         except Exception as e:
             logger.error(f"打印执行异常: {e}")
             await self._update_print_status(job_id, PrintState.FAILED, "failed")
 
-    async def _update_print_status(self, job_id: str, state: PrintState, status: str):
+    async def _update_print_status(self, job_id: str, state: PrintState, status: str,
+                                   file_path: Optional[str] = None):
         db = SessionLocal()
         try:
             job = db.query(PrintJob).filter(PrintJob.id == job_id).first()
@@ -131,11 +158,51 @@ class PrintService:
                 job.printer_status = self._printer_status
                 if state == PrintState.COMPLETED:
                     job.completed_at = datetime.utcnow()
+                    if file_path:
+                        job.file_path = file_path
                 db.commit()
         except Exception:
             db.rollback()
         finally:
             db.close()
+
+    def _generate_ps_file(self, job_id: str, content: str) -> str:
+        """生成 ps 格式打印文件, 输出到电子盘 (模拟 A:\\printlog)
+
+        文件内容包含打印报告文本, 与界面展示信息一致, 供 ACoreIDE 下载查看。
+        """
+        self._print_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"print_{job_id[:8]}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.{self._file_ext}"
+        file_path = self._print_dir / filename
+
+        # 组装 PostScript 文件 (含报告文本内容)
+        ps_lines = [
+            "%!PS-Adobe-3.0",
+            f"%%Title: AHMU Print Job {job_id}",
+            "%%Creator: AHMU Simulator",
+            f"%%CreationDate: {datetime.utcnow().isoformat()}",
+            "%%Pages: 1",
+            "%%EndComments",
+            "",
+            "/Courier findfont 11 scalefont setfont",
+            "36 792 moveto",
+        ]
+        for line in content.split("\n"):
+            # 转义 PostScript 特殊字符
+            escaped = (line.replace("\\", "\\\\").replace("(", "\\(")
+                       .replace(")", "\\)"))
+            ps_lines.append(f"({escaped}) show")
+            ps_lines.append("0 -14 rmoveto")
+        ps_lines.append("showpage")
+        ps_lines.append("%%EOF")
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(ps_lines))
+        except Exception as e:
+            logger.error(f"生成 ps 文件失败: {e}")
+            return ""
+        return str(file_path)
 
     async def _printer_status_loop(self):
         """打印机状态监控 (L350消息)"""
@@ -165,12 +232,15 @@ class PrintService:
             "total": total,
             "page": page,
             "size": size,
+            "print_dir": self.print_dir,
+            "print_dir_real": self.print_dir_real,
             "items": [{
                 "id": j.id,
                 "job_type": j.job_type,
                 "content": j.content[:100] if j.content else "",
                 "status": j.status,
                 "printer_status": j.printer_status,
+                "file_path": j.file_path,
                 "created_at": j.created_at.isoformat() if j.created_at else None,
                 "completed_at": j.completed_at.isoformat() if j.completed_at else None,
             } for j in items],

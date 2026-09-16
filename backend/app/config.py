@@ -74,6 +74,28 @@ ENGINE_MONITOR_CONFIG = {
     "emu_validity_fail_prob": 0.03,     # EMU 数据失效模拟概率
 }
 
+# 数据重置管理功能配置 (4.3.10 数据重置管理)
+# 需求: 通过读取配置文件确定启用 NVM 重置服务的成员系统列表;
+#       仅能在维护模式下重置成员系统 NVM 数据; 接收并存储重置结果; 记录重置日志
+#       响应用户打印指令, 将重置结果发送给信息系统打印机
+NVM_RESET_CONFIG = {
+    "config_file": "nvm_reset_config.json",   # 启用 NVM 重置服务的成员系统配置文件 (位于 CONFIG_DIR)
+    "reset_timeout_sec": 10,                  # 成员系统重置响应超时 (秒)
+    # 重置类型: full/partial = NVM 数据重置; fault_history = 故障历史重置 (LRU Fault History Reset)
+    "reset_types": ["full", "partial", "fault_history"],
+    "max_concurrent_resets": 5,               # 最大并发重置数
+    "result_success_prob": 0.92,              # Mock 重置成功概率
+}
+
+# 打印输出配置 (4.3.10 数据重置管理 - 打印结果输出至电子盘)
+# 测试用例: 通过 ACoreIDE 访问电子盘 A:\printlog, 下载打印 ps 格式文件
+# 本机无 A 盘, 用 DATA_DIR/printlog 模拟电子盘 A:\printlog
+PRINT_CONFIG = {
+    "output_dir": "printlog",          # 打印输出目录名 (位于 DATA_DIR 下)
+    "file_extension": "ps",            # 打印文件格式 (PostScript)
+    "simulated_drive": "A:\\printlog",  # 模拟的电子盘路径 (展示/说明用)
+}
+
 # 维护模式条件 (三者同时满足且持续超过30s)
 #   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {
