@@ -188,6 +188,7 @@ const mainTabs = [
 const subTabs = [
   { path: '/fault', label: 'FAILURE REPORTS', title: '失效报告' },
   { path: '/groundtest', label: 'GROUND TEST', title: '地面测试' },
+  { path: '/enginetrim', label: 'ENGINE TRIM', title: '发动机配平' },
   { path: '/events', label: 'EVENT REPORTS', title: '事件报告' },
   { path: '/lifecycle', label: 'TIME CYCLE', title: '生命周期' },
   { path: '/lru', label: 'LRU FAULT HISTORY', title: 'LRU故障历史' },

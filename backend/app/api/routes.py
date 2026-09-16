@@ -19,6 +19,7 @@ from app.services.maintenance_mode import maintenance_service
 from app.services.lifecycle import lifecycle_service
 from app.services.acars import acars_service
 from app.services.print_mgr import print_service
+from app.services.engine_trim import engine_trim_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -362,3 +363,40 @@ async def submit_print(content: str, job_type: str = "file_transfer"):
 async def get_print_jobs(page: int = 1, size: int = 20, db: Session = Depends(get_db)):
     """获取打印任务列表"""
     return print_service.get_print_jobs(db, page, size)
+
+
+# ==================== 发动机配平 (4.3.9) ====================
+
+@router.post("/engine-trim/command")
+async def submit_trim_command(payload: dict):
+    """下发发动机配平指令 (地面HMI/驾驶舱/PMAT 三来源统一入口)
+
+    请求体示例:
+      {"engine_id": 1, "trim_type": "thrust", "target_trim": 0.5,
+       "source": "ground", "source_terminal": "GROUND_HMI_01", "operator": "TEST"}
+    """
+    return await engine_trim_service.submit_trim_command(payload)
+
+
+@router.get("/engine-trim/commands")
+async def get_trim_commands(
+    engine_id: Optional[int] = None,
+    source: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询配平指令列表 (可按发动机/来源筛选)"""
+    return engine_trim_service.get_commands(db, engine_id, source, page, size)
+
+
+@router.get("/engine-trim/data")
+async def get_trim_data(engine_id: Optional[int] = None):
+    """查询发动机配平数据 (实时, 来自EMU)"""
+    return engine_trim_service.get_latest_data(engine_id)
+
+
+@router.get("/engine-trim/status")
+async def get_trim_status():
+    """查询配平功能整体状态"""
+    return engine_trim_service.get_trim_status()

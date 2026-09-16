@@ -50,6 +50,30 @@ SIMULATION_CONFIG = {
     "max_terminals": 5,              # 最大终端接入数
 }
 
+# 发动机配平功能配置 (4.3.9 发动机配平)
+ENGINE_TRIM_CONFIG = {
+    "engine_count": 4,                              # 发动机数量 (四发飞机)
+    "trim_range": [-5.0, 5.0],                      # 配平值范围 (%)
+    "trim_types": ["thrust", "power", "fuel_flow"], # 配平类型: 推力/功率/燃油流量
+    "command_sources": ["ground", "cockpit", "pmat"],  # 指令来源: 地面HMI/驾驶舱/PMAT
+    "ack_timeout_sec": 5,                           # EMU 指令接受确认超时 (秒)
+    "trim_apply_timeout_sec": 30,                   # 配平执行到位超时 (EMU 从接受到 applied 最长时间)
+    "max_concurrent_per_engine": 1,                 # 每台发动机最大并发配平指令数
+    "data_report_period_ms": 1000,                  # EMU 配平数据上报周期 (毫秒)
+}
+
+# 发动机监视装置 (EMU) Mock 配置
+ENGINE_MONITOR_CONFIG = {
+    "engine_count": 4,
+    "n1_range": [20.0, 105.0],          # N1 低压转子转速 (%)
+    "n2_range": [20.0, 105.0],          # N2 高压转子转速 (%)
+    "egt_range": [200.0, 1000.0],       # 排气温度 (℃)
+    "fuel_flow_range": [300.0, 6000.0], # 燃油流量 (kg/h)
+    "thrust_rating_range": [20.0, 110.0],  # 推力额定 (%)
+    "a664_vl_base": 21,                 # 发动机监视数据 A664 虚拟链路起始号 (VL21~VL24, 避开 VL1~10)
+    "emu_validity_fail_prob": 0.03,     # EMU 数据失效模拟概率
+}
+
 # 维护模式条件 (三者同时满足且持续超过30s)
 #   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {

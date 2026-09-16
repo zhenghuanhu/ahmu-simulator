@@ -20,9 +20,18 @@ export function setSystemMode(mode) {
 /** 维护模式下允许访问的页面 (仅地面测试与数据加载) */
 export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload']
 
+/**
+ * 两种模式下始终可访问的页面 (跨模式业务)
+ * 发动机配平(Engine Trim)指令同时来自地面 HMI 与驾驶舱/PMAT,
+ * 属跨维护/正常模式业务, 不应被任一模式禁用隐藏。
+ */
+export const ALWAYS_ALLOWED_PATHS = ['/enginetrim']
+
 /** 判断路径在当前模式下是否可访问 */
 export function isPathAllowed(path, mode = systemMode.value) {
   if (path === '/login') return true
+  // 跨模式页面: 两种模式均放行
+  if (ALWAYS_ALLOWED_PATHS.includes(path)) return true
   if (mode === 'maintenance') {
     return MAINTENANCE_ONLY_PATHS.includes(path)
   }

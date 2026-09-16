@@ -293,3 +293,59 @@ class ACARSMessage(Base):
     link_status = Column(String(20), default="idle")  # idle/busy/lost
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     sent_at = Column(DateTime, nullable=True)
+
+
+class EngineTrimCommand(Base):
+    """发动机配平指令表 (4.3.9 发动机配平功能)
+
+    指令来源: ground(地面HMI) / cockpit(驾驶舱) / pmat(PMAT)
+    状态机:   pending -> validating -> sending -> waiting_ack -> applied -> completed
+                     |            |                                    |
+                     +-> rejected +-> (超时) timeout <-+--------------+-> rejected
+    """
+    __tablename__ = "engine_trim_commands"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    command_id = Column(String(50), nullable=False, index=True)   # 业务指令号 (如 TRIM-20260816-0001)
+    engine_id = Column(Integer, nullable=False, index=True)       # 发动机编号 (1~4)
+    trim_type = Column(String(30), default="thrust")              # thrust/power/fuel_flow
+    target_trim = Column(Float, nullable=False)                   # 目标配平值 (%)
+    source = Column(String(20), nullable=False, index=True)       # ground/cockpit/pmat
+    source_terminal = Column(String(50))                          # 来源终端标识 (如 GROUND_HMI_01)
+    operator = Column(String(50), default="TEST")                 # 操作员
+    status = Column(String(30), default="pending", index=True)    # 指令状态
+    reject_reason = Column(Text, nullable=True)                   # 拒绝/超时原因
+    ack_received = Column(Boolean, default=False)                 # 是否收到 EMU 确认
+    applied_trim = Column(Float, nullable=True)                   # EMU 实际执行的配平值
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_trim_cmd_engine_status", "engine_id", "status"),
+    )
+
+
+class EngineTrimData(Base):
+    """发动机配平数据快照表 (来自发动机监视装置 EMU)
+
+    AHMU 从 EMU 采集配平数据, 用于转发给驾驶舱/PMAT 人机交互界面展示
+    """
+    __tablename__ = "engine_trim_data"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    engine_id = Column(Integer, nullable=False, index=True)       # 发动机编号 (1~4)
+    n1 = Column(Float)                                            # N1 低压转子转速 (%)
+    n2 = Column(Float)                                            # N2 高压转子转速 (%)
+    egt = Column(Float)                                           # 排气温度 (℃)
+    fuel_flow = Column(Float)                                     # 燃油流量 (kg/h)
+    thrust_rating = Column(Float)                                 # 推力额定 (%)
+    trim_value = Column(Float, default=0.0)                       # 当前配平值 (%)
+    trim_target = Column(Float, nullable=True)                    # 目标配平值 (%)
+    trim_status = Column(String(30), default="monitoring")        # monitoring/applying/applied
+    validity = Column(String(30), default="valid")                # valid/unavailable/out_of_range
+    source = Column(String(20), default="emu")                    # 数据来源 (emu)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_trim_data_engine_time", "engine_id", "timestamp"),
+    )
