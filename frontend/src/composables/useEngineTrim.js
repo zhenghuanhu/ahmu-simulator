@@ -97,6 +97,10 @@ export function useEngineTrim() {
         if (d) trimData[d.engine_id] = d
       }
       lastUpdateAt.value = new Date()
+      // 首次加载若后端 EMU 尚未完成首轮上报(返回空), 延迟重试一次补齐空窗
+      if (!list.length || list.every(x => x == null)) {
+        setTimeout(() => { if (!Object.keys(trimData).length) fetchTrimData() }, 1000)
+      }
     } catch (e) {
       dataError.value = '实时数据加载失败'
     }
@@ -130,6 +134,12 @@ export function useEngineTrim() {
     // 新指令接收
     on('engine_trim_command_received', () => {
       fetchCommands()
+    })
+
+    // WebSocket 连接建立后主动同步一次数据, 消除首屏时序空窗
+    on('connected', () => {
+      fetchCommands()
+      fetchTrimData()
     })
   }
 

@@ -163,7 +163,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useEngineTrim } from '../composables/useEngineTrim'
 
@@ -245,10 +245,21 @@ const formatTime = (t) => t ? new Date(t).toLocaleTimeString() : '--'
 
 // ---------- 生命周期 ----------
 
+let pollTimer = null
+
 onMounted(() => {
   subscribe()        // 订阅 WebSocket 实时推送
   fetchCommands()    // 初始加载指令列表
-  fetchTrimData()    // 初始加载实时数据 (兜底)
+  fetchTrimData()    // 初始加载实时数据
+  // 定时轮询兜底: 即使 WebSocket 推送异常, 也保证实时数据持续更新并即时呈现
+  pollTimer = setInterval(() => {
+    if (!paused.value) fetchTrimData()
+  }, 3000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = null
 })
 </script>
 
