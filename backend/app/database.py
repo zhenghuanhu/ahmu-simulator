@@ -239,6 +239,33 @@ class NVMData(Base):
     download_status = Column(String(20), default="stored")  # stored/downloaded
 
 
+class NVMDownloadLog(Base):
+    """NVM 数据下载日志表 (4.3.14 数据下载管理)
+
+    记录每次 NVM 数据获取操作 (操作时间/操作用户/被操作的设备/获取进度/操作状态)。
+    状态机: pending -> retrieving -> completed/failed/timeout
+    """
+    __tablename__ = "nvm_download_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    download_id = Column(String(50), nullable=False, index=True)  # 业务下载号 (如 DL-20260916-0001)
+    member_system = Column(String(50), nullable=False, index=True)  # 成员系统
+    data_type = Column(String(50))                                  # fault_snapshot/config_snapshot/life_cycle
+    status = Column(String(20), default="pending", index=True)      # pending/retrieving/completed/failed/timeout
+    progress = Column(Float, default=0.0)                           # 获取进度 0.0~100.0
+    data_size = Column(Integer, default=0)                          # NVM 数据大小 (字节)
+    nvm_data_id = Column(String(36), nullable=True)                 # 关联 NVMData.id
+    operator = Column(String(50), default="TEST")                   # 操作用户
+    error_message = Column(Text, nullable=True)                     # 失败/超时原因
+    started_at = Column(DateTime, default=datetime.utcnow)          # 获取开始时间
+    completed_at = Column(DateTime, nullable=True)                  # 获取完成时间
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_nvm_download_member_status", "member_system", "status"),
+    )
+
+
 class EventReport(Base):
     """事件报告表"""
     __tablename__ = "event_reports"

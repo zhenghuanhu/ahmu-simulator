@@ -96,6 +96,18 @@ PRINT_CONFIG = {
     "simulated_drive": "A:\\printlog",  # 模拟的电子盘路径 (展示/说明用)
 }
 
+# 数据下载管理功能配置 (4.3.14 数据下载管理)
+# 需求: 从人机界面接收成员系统NVM数据获取指令; 仅维护模式下允许获取;
+#       实时显示获取进度; 存储NVM数据+下载日志; 支持下载到PMAT; 打印获取结果
+NVM_DOWNLOAD_CONFIG = {
+    "data_types": ["fault_snapshot", "config_snapshot", "life_cycle"],  # NVM 数据类型
+    "retrieve_timeout_sec": 15,                  # 获取超时 (秒)
+    "max_concurrent_retrieves": 5,               # 最大并发获取数
+    "data_size_range": [1024, 4 * 1024 * 1024],  # NVM 数据大小范围 (字节, 1KB~4MB)
+    "retrieve_success_prob": 0.95,               # Mock 获取成功概率
+    "progress_steps": 20,                        # 进度递增步数 (每步 ~0.1s)
+}
+
 # 维护模式条件 (三者同时满足且持续超过30s)
 #   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {

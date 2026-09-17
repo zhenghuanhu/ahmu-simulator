@@ -21,6 +21,7 @@ from app.services.acars import acars_service
 from app.services.print_mgr import print_service
 from app.services.engine_trim import engine_trim_service
 from app.services.nvm_reset import nvm_reset_service
+from app.services.nvm_download import nvm_download_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -478,3 +479,76 @@ async def print_nvm_reset_result(reset_id: str):
 async def get_nvm_reset_status():
     """查询数据重置管理功能整体状态"""
     return nvm_reset_service.get_reset_status()
+
+
+# ==================== 数据下载管理 (4.3.14) ====================
+
+@router.post("/nvm-download/retrieve")
+async def retrieve_nvm_data(payload: dict):
+    """从人机界面接收成员系统 NVM 数据获取指令 (仅维护模式)
+
+    请求体示例:
+      {"member_system": "MEM001", "data_type": "fault_snapshot", "operator": "TEST"}
+    """
+    member_system = payload.get("member_system", "")
+    data_type = payload.get("data_type", "fault_snapshot")
+    operator = payload.get("operator", "TEST")
+    return await nvm_download_service.retrieve_member_system(
+        member_system, data_type, operator)
+
+
+@router.post("/nvm-download/batch-retrieve")
+async def batch_retrieve_nvm_data(payload: dict):
+    """批量获取多个成员系统 NVM 数据 (仅维护模式)
+
+    请求体示例:
+      {"member_systems": ["MEM001", "MEM002"], "data_type": "fault_snapshot", "operator": "TEST"}
+    """
+    member_systems = payload.get("member_systems", [])
+    data_type = payload.get("data_type", "fault_snapshot")
+    operator = payload.get("operator", "TEST")
+    return await nvm_download_service.batch_retrieve(member_systems, data_type, operator)
+
+
+@router.get("/nvm-download/logs")
+async def get_nvm_download_logs(
+    member_system: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询 NVM 下载日志 (可按成员系统/状态筛选)"""
+    return nvm_download_service.get_download_logs(db, member_system, status, page, size)
+
+
+@router.get("/nvm-download/data")
+async def get_nvm_data_list(
+    member_system: Optional[str] = None,
+    data_type: Optional[str] = None,
+    download_status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询 NVM 数据列表 (数据库管理)"""
+    return nvm_download_service.get_nvm_data(
+        db, member_system, data_type, download_status, page, size)
+
+
+@router.post("/nvm-download/export/{nvm_data_id}")
+async def export_nvm_data_to_pmat(nvm_data_id: str):
+    """将数据库中存储的 NVM 数据下载到 PMAT"""
+    return await nvm_download_service.export_to_pmat(nvm_data_id)
+
+
+@router.post("/nvm-download/print/{download_id}")
+async def print_nvm_download_result(download_id: str):
+    """打印 NVM 数据获取结果 (发送至信息系统打印机)"""
+    return await nvm_download_service.print_download_result(download_id)
+
+
+@router.get("/nvm-download/status")
+async def get_nvm_download_status():
+    """查询数据下载管理功能整体状态"""
+    return nvm_download_service.get_download_status()

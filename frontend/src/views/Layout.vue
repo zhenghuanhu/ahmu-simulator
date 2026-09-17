@@ -189,6 +189,7 @@ const subTabs = [
   { path: '/fault', label: 'FAILURE REPORTS', title: '失效报告' },
   { path: '/groundtest', label: 'GROUND TEST', title: '地面测试' },
   { path: '/nvmreset', label: 'DATA RESET', title: '数据重置' },
+  { path: '/nvmdownload', label: 'DATA DOWNLOAD', title: '数据下载' },
   { path: '/enginetrim', label: 'ENGINE TRIM', title: '发动机配平' },
   { path: '/events', label: 'EVENT REPORTS', title: '事件报告' },
   { path: '/lifecycle', label: 'TIME CYCLE', title: '生命周期' },

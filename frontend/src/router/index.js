@@ -20,6 +20,7 @@ const routes = [
       { path: 'groundtest', name: 'StartupTest', component: () => import('../views/StartupTest.vue'), meta: { title: 'Ground Test' } },
       { path: 'dataload', name: 'DataLoad', component: () => import('../views/DataLoad.vue'), meta: { title: 'Data Load' } },
       { path: 'nvmreset', name: 'NVMReset', component: () => import('../views/NVMReset.vue'), meta: { title: 'Data Reset' } },
+      { path: 'nvmdownload', name: 'NVMDownload', component: () => import('../views/NVMDownload.vue'), meta: { title: 'Data Download' } },
       { path: 'enginetrim', name: 'EngineTrim', component: () => import('../views/EngineTrim.vue'), meta: { title: 'Engine Trim' } },
       { path: 'lifecycle', name: 'Lifecycle', component: () => import('../views/Lifecycle.vue'), meta: { title: 'Time Cycle' } },
       { path: 'acars', name: 'ACARS', component: () => import('../views/ACARS.vue'), meta: { title: 'ACARS' } },
