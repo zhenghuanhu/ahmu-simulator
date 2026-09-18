@@ -18,11 +18,12 @@ import json
 import time
 import urllib.request
 import urllib.error
+from typing import Optional
 
 BASE = "http://127.0.0.1:8443/api/v1"
 
 
-def call(method: str, path: str, body: dict | None = None) -> dict:
+def call(method: str, path: str, body: Optional[dict] = None) -> dict:
     """调用 REST API, 返回解析后的 JSON"""
     url = BASE + path
     data = json.dumps(body).encode("utf-8") if body is not None else None

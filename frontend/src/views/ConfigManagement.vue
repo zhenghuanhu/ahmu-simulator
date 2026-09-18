@@ -74,10 +74,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useWebSocket } from '../composables/useWebSocket'
 
-const { on } = useWebSocket()
+const { on, off } = useWebSocket()
 
 const configs = ref([])
 const loading = ref(false)
@@ -120,8 +120,14 @@ const batchVerify = () => {
 
 const formatTime = (t) => t ? new Date(t).toLocaleString() : '--'
 
+const onConfigMismatch = () => fetchConfigs()
+
 onMounted(() => {
   fetchConfigs()
-  on('config_mismatch', () => fetchConfigs())
+  on('config_mismatch', onConfigMismatch)
+})
+
+onUnmounted(() => {
+  off('config_mismatch', onConfigMismatch)
 })
 </script>

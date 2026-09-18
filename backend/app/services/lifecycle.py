@@ -21,7 +21,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.database import SessionLocal, TCEquipment, LifecycleData
+from app.database import SessionLocal, TCEquipment, LifecycleData, LifecycleRetrievalLog
 from app.core.websocket_manager import ws_manager
 from app.services.maintenance_mode import maintenance_service
 from app.core.arinc_mock import hardware
@@ -312,18 +312,23 @@ class LifecycleService:
 
     # ==================== 时间周期获取 ====================
 
-    async def trigger_retrieval(self, equip_id: str) -> dict:
+    async def trigger_retrieval(self, equip_id: str, operator: str = "TEST") -> dict:
         """触发单个设备时间周期获取 (对应 tcRetrieval + TimeCycle_MS)
         模拟ARINC通信流程:
-          1. 模式校验 (时间周期属"其它业务", 正常模式可操作)
+          1. 模式校验 (仅维护模式下可获取生命周期数据, 对应文档4.3.11)
           2. 设备可用性校验 (isAvailable=1才可获取)
           3. 通过A429 Label227/Label230或A664发送获取命令
           4. 成员系统响应 (2s延迟)
           5. 更新 power_on_time / power_cycle_count / status_string
+          6. 记录生命周期获取日志 (操作时间/操作用户/被操作的设备/操作状态)
         """
-        # 模式校验: 维护模式下仅可操作地面测试与数据加载
-        if maintenance_service.current_mode == "maintenance":
-            return {"status": "error", "message": "维护模式下仅可操作地面测试与数据加载业务"}
+        # 模式校验: 仅维护模式下可获取成员系统生命周期数据
+        if maintenance_service.current_mode != "maintenance":
+            self._write_log(equip_id, "", "", operator, "rejected",
+                            error="非维护模式, 无法获取生命周期数据 "
+                                  f"(当前模式: {maintenance_service.current_mode})")
+            return {"status": "error",
+                    "message": f"非维护模式, 无法获取生命周期数据 (当前模式: {maintenance_service.current_mode})"}
 
         db = SessionLocal()
         try:
@@ -332,12 +337,20 @@ class LifecycleService:
             ).first()
 
             if not equip:
+                self._write_log(equip_id, "", "", operator, "rejected",
+                                error=f"设备 {equip_id} 不存在")
                 return {"status": "error", "message": f"设备 {equip_id} 不存在"}
 
             # 可用性校验 (对应 isAvailable: 0=异常, 1=可获取, 2=不可点击)
             if equip.is_available == 2:
+                self._write_log(equip_id, equip.equip_name, equip.member_system,
+                                operator, "rejected",
+                                error=f"设备 {equip.equip_name} 不可点击获取")
                 return {"status": "error", "message": f"设备 {equip.equip_name} 不可点击获取"}
             if equip.is_available == 0:
+                self._write_log(equip_id, equip.equip_name, equip.member_system,
+                                operator, "failed",
+                                error=f"设备 {equip.equip_name} 查询异常")
                 return {"status": "error", "message": f"设备 {equip.equip_name} 查询异常"}
 
             # 推送开始事件
@@ -380,6 +393,11 @@ class LifecycleService:
 
             logger.info(f"[TimeCycle] {equip_id} 获取成功: 运行{status_str}, 循环{new_count}次")
 
+            # 记录生命周期获取日志 (成功)
+            self._write_log(equip_id, equip.equip_name, equip.member_system,
+                            operator, "success",
+                            power_on_time=new_time, power_cycle_count=new_count)
+
             # 推送结果
             await ws_manager.broadcast("lifecycle_retrieved", {
                 "equip_id": equip_id,
@@ -410,6 +428,7 @@ class LifecycleService:
             except Exception:
                 pass
 
+            self._write_log(equip_id, "", "", operator, "failed", error=str(e))
             return {"status": "error", "message": str(e)}
         finally:
             db.close()
@@ -418,8 +437,9 @@ class LifecycleService:
         """批量获取时间周期数据 (200个成员系统)
         串行获取, 每个设备间隔50ms, 推送进度
         """
-        if maintenance_service.current_mode == "maintenance":
-            return {"status": "error", "message": "维护模式下仅可操作地面测试与数据加载业务"}
+        if maintenance_service.current_mode != "maintenance":
+            return {"status": "error",
+                    "message": f"非维护模式, 无法获取生命周期数据 (当前模式: {maintenance_service.current_mode})"}
 
         db = SessionLocal()
         try:
@@ -521,6 +541,61 @@ class LifecycleService:
                 "retrieval_status": eq.retrieval_status,
                 "last_retrieved": eq.last_retrieved.isoformat() if eq.last_retrieved else None,
             } for eq in items],
+        }
+
+    # ==================== 生命周期获取日志 ====================
+
+    def _write_log(self, equip_id: str, equip_name: str, member_system: str,
+                   operator: str, status: str, power_on_time: int = 0,
+                   power_cycle_count: int = 0, error: Optional[str] = None):
+        """记录生命周期获取日志 (操作时间/操作用户/被操作的设备/操作状态)"""
+        db = SessionLocal()
+        try:
+            log = LifecycleRetrievalLog(
+                equip_id=equip_id,
+                equip_name=equip_name,
+                member_system=member_system,
+                operator=operator,
+                status=status,
+                power_on_time=power_on_time,
+                power_cycle_count=power_cycle_count,
+                error_message=error,
+            )
+            db.add(log)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"记录生命周期获取日志失败: {e}")
+        finally:
+            db.close()
+
+    def get_retrieval_logs(self, db: Session, status: Optional[str] = None,
+                           equip_id: Optional[str] = None,
+                           page: int = 1, size: int = 20) -> dict:
+        """查询生命周期获取日志"""
+        query = db.query(LifecycleRetrievalLog)
+        if status:
+            query = query.filter(LifecycleRetrievalLog.status == status)
+        if equip_id:
+            query = query.filter(LifecycleRetrievalLog.equip_id == equip_id)
+        total = query.count()
+        items = query.order_by(LifecycleRetrievalLog.operated_at.desc()) \
+            .offset((page - 1) * size).limit(size).all()
+        return {
+            "total": total,
+            "page": page,
+            "size": size,
+            "items": [{
+                "equip_id": l.equip_id,
+                "equip_name": l.equip_name,
+                "member_system": l.member_system,
+                "operator": l.operator,
+                "status": l.status,
+                "power_on_time": l.power_on_time,
+                "power_cycle_count": l.power_cycle_count,
+                "error_message": l.error_message,
+                "operated_at": l.operated_at.isoformat() if l.operated_at else None,
+            } for l in items],
         }
 
     # ==================== 工具函数 ====================

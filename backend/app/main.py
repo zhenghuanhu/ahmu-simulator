@@ -69,6 +69,7 @@ async def lifespan(app: FastAPI):
     from app.services.engine_trim import engine_trim_service
     from app.services.nvm_reset import nvm_reset_service
     from app.services.nvm_download import nvm_download_service
+    from app.services.aircraft_status import aircraft_status_service
 
     await fault_service.start()
     await param_service.start()
@@ -82,6 +83,7 @@ async def lifespan(app: FastAPI):
     await engine_trim_service.start()
     await nvm_reset_service.start()
     await nvm_download_service.start()
+    await aircraft_status_service.start()
 
     logger.info("=" * 60)
     logger.info("AHMU 仿真器启动完成!")
@@ -107,6 +109,7 @@ async def lifespan(app: FastAPI):
     await engine_trim_service.stop()
     await nvm_reset_service.stop()
     await nvm_download_service.stop()
+    await aircraft_status_service.stop()
 
     await hardware.shutdown()
     shm_channel.close()
@@ -184,7 +187,8 @@ async def serve_root():
     """根路径返回前端index.html"""
     index_path = frontend_dist / "index.html"
     if index_path.exists():
-        return FileResponse(str(index_path))
+        # index.html 不缓存: 确保每次刷新都能取到最新构建 (assets 为 hash 文件名可长期缓存)
+        return FileResponse(str(index_path), headers={"Cache-Control": "no-cache"})
     return HTMLResponse("<h1>AHMU Simulator Backend</h1><p>Frontend not built. Run: cd frontend && npm run build</p>")
 
 @app.get("/{full_path:path}")
@@ -194,7 +198,7 @@ async def serve_frontend(full_path: str):
         return HTMLResponse("Not Found", status_code=404)
     index_path = frontend_dist / "index.html"
     if index_path.exists():
-        return FileResponse(str(index_path))
+        return FileResponse(str(index_path), headers={"Cache-Control": "no-cache"})
     return HTMLResponse("Not Found", status_code=404)
 
 

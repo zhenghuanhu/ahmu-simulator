@@ -7,10 +7,10 @@
         {{ totalEquips }} equipments / {{ totalAtas }} ATA chapters
       </span>
       <span style="flex: 1;"></span>
-      <span class="ohms-dim" :class="{'ohms-yellow': mode === 'maintenance'}" style="font-size: 12px; margin-right: 16px;">
-        {{ mode === 'maintenance' ? 'MAINTENANCE MODE (仅地面测试/数据加载可操作)' : 'NORMAL MODE' }}
+      <span class="ohms-dim" :class="{'ohms-green': mode === 'maintenance', 'ohms-red': mode !== 'maintenance'}" style="font-size: 12px; margin-right: 16px;">
+        {{ mode === 'maintenance' ? 'MAINTENANCE MODE (可获取生命周期数据)' : 'NORMAL MODE (需维护模式)' }}
       </span>
-      <el-button type="primary" size="small" @click="batchRetrieve" :loading="batchLoading">
+      <el-button type="primary" size="small" @click="batchRetrieve" :loading="batchLoading" :disabled="mode !== 'maintenance'">
         BATCH RETRIEVE (200)
       </el-button>
     </div>
@@ -156,6 +156,44 @@
         <span class="ohms-cyan">●</span> Retrieved: {{ summary.retrieved }}
       </span>
     </div>
+
+    <!-- 生命周期获取日志 -->
+    <div class="ohms-panel tc-log-panel">
+      <div class="tc-panel-header" style="border-bottom: 1px solid #555;">
+        <span class="ohms-title" style="font-size: 13px;">RETRIEVAL LOG</span>
+        <span class="ohms-dim" style="margin-left: 12px; font-size: 12px;">
+          生命周期获取日志 (操作时间/操作用户/被操作的设备/操作状态)
+        </span>
+        <span style="flex: 1;"></span>
+        <el-button size="small" @click="fetchLogs">刷新</el-button>
+      </div>
+      <div class="tc-log-table" v-loading="logsLoading">
+        <div class="tc-log-header">
+          <span class="tc-log-time">操作时间</span>
+          <span class="tc-log-id">设备</span>
+          <span class="tc-log-name">设备名称</span>
+          <span class="tc-log-user">操作用户</span>
+          <span class="tc-log-timeval">上电运行时间</span>
+          <span class="tc-log-cycle">循环计数</span>
+          <span class="tc-log-status">状态</span>
+        </div>
+        <div v-for="log in logs" :key="log.operated_at + log.equip_id" class="tc-log-row">
+          <span class="tc-log-time">{{ formatDateTime(log.operated_at) }}</span>
+          <span class="tc-log-id">{{ log.equip_id }}</span>
+          <span class="tc-log-name">{{ log.equip_name || '--' }}</span>
+          <span class="tc-log-user">{{ log.operator }}</span>
+          <span class="tc-log-timeval">{{ log.power_on_time ? formatTime(log.power_on_time) : '--' }}</span>
+          <span class="tc-log-cycle">{{ log.power_cycle_count || '--' }}</span>
+          <span class="tc-log-status">
+            <span :class="logStatusClass(log.status)">{{ logStatusText(log.status) }}</span>
+            <span v-if="log.error_message" class="ohms-red" style="font-size: 11px;" :title="log.error_message">
+              · {{ log.error_message.slice(0, 30) }}
+            </span>
+          </span>
+        </div>
+        <div v-if="!logsLoading && logs.length === 0" class="tc-empty">暂无获取日志</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -196,6 +234,10 @@ const mode = ref('normal')
 
 // Summary
 const summary = reactive({ retrievable: 0, na: 0, abnormal: 0, retrieved: 0 })
+
+// Retrieval logs
+const logs = ref([])
+const logsLoading = ref(false)
 
 const fetchAtas = () => {
   ataLoading.value = true
@@ -249,6 +291,10 @@ const changePage = (delta) => {
 }
 
 const retrieveOne = (equipId) => {
+  if (mode.value !== 'maintenance') {
+    ElMessage.warning('需维护模式才能获取生命周期数据')
+    return
+  }
   retrievingId.value = equipId
   fetch(api(`/api/v1/lifecycle/retrieve/${equipId}`), { method: 'POST' })
     .then(r => r.json())
@@ -262,6 +308,7 @@ const retrieveOne = (equipId) => {
         }
         ElMessage.success(`${data.equip_name}: ${data.status_string}, ${data.power_cycle_count} cycles`)
         fetchEquips()
+        fetchLogs()
       } else {
         ElMessage.error(data.message)
       }
@@ -271,8 +318,8 @@ const retrieveOne = (equipId) => {
 }
 
 const batchRetrieve = () => {
-  if (mode.value === 'maintenance') {
-    ElMessage.warning('Maintenance mode: only Ground Test / Data Load operations allowed')
+  if (mode.value !== 'maintenance') {
+    ElMessage.warning('需维护模式才能获取生命周期数据')
     return
   }
   batchLoading.value = true
@@ -304,6 +351,20 @@ const fetchMode = () => {
     .catch(() => {})
 }
 
+const fetchLogs = () => {
+  logsLoading.value = true
+  fetch(api('/api/v1/lifecycle/logs?page=1&size=50'))
+    .then(r => r.json())
+    .then(data => { logs.value = data.items || [] })
+    .catch(() => {})
+    .finally(() => { logsLoading.value = false })
+}
+
+const logStatusText = (s) => ({ success: '成功', failed: '失败', rejected: '拒绝' }[s] || s)
+const logStatusClass = (s) => ({ success: 'ohms-green', failed: 'ohms-red', rejected: 'ohms-yellow' }[s] || 'ohms-dim')
+
+const formatDateTime = (t) => t ? new Date(t).toLocaleString() : '--'
+
 const formatTime = (sec) => {
   if (!sec || sec <= 0) return '--'
   const h = Math.floor(sec / 3600)
@@ -317,6 +378,7 @@ onMounted(() => {
   fetchEquips()
   fetchStatus()
   fetchMode()
+  fetchLogs()
   setInterval(fetchMode, 5000)
 
   on('mode_change', (data) => { mode.value = data.mode })
@@ -334,6 +396,7 @@ onMounted(() => {
 
   on('lifecycle_retrieved', () => {
     fetchEquips()
+    fetchLogs()
   })
 })
 </script>
@@ -615,4 +678,61 @@ onMounted(() => {
   color: #555;
   font-size: 13px;
 }
+
+.tc-log-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  max-height: 240px;
+}
+
+.tc-log-table {
+  overflow-y: auto;
+}
+
+.tc-log-header,
+.tc-log-row {
+  display: grid;
+  grid-template-columns: 160px 80px 1fr 80px 120px 80px 140px;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+}
+
+.tc-log-header {
+  height: 32px;
+  border-bottom: 1px solid #444;
+  background: #1f1f1f;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #aaa;
+  letter-spacing: 1px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tc-log-row {
+  height: 34px;
+  border-bottom: 1px solid #222;
+  font-size: 12px;
+  color: #fff;
+}
+
+.tc-log-row:hover {
+  background: #1a1a1a;
+}
+
+.tc-log-id {
+  color: #00ffff;
+  font-size: 11px;
+}
+
+.tc-log-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #bbb;
+}
+
 </style>

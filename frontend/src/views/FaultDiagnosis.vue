@@ -89,11 +89,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useWebSocket } from '../composables/useWebSocket'
 
-const { on } = useWebSocket()
+const { on, off } = useWebSocket()
 
 const faults = ref([])
 const loading = ref(false)
@@ -156,9 +156,16 @@ const severityClass = (s) => ({
 
 const formatTime = (t) => t ? new Date(t).toLocaleString() : '--'
 
+const onFaultChanged = () => fetchFaults()
+
 onMounted(() => {
   fetchFaults()
-  on('fault_new', () => fetchFaults())
-  on('fault_resolved', () => fetchFaults())
+  on('fault_new', onFaultChanged)
+  on('fault_resolved', onFaultChanged)
+})
+
+onUnmounted(() => {
+  off('fault_new', onFaultChanged)
+  off('fault_resolved', onFaultChanged)
 })
 </script>

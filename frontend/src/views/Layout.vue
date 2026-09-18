@@ -3,30 +3,35 @@
     <!-- 顶部导航 - 两排斜角标签 -->
     <div class="top-nav">
       <div class="nav-row nav-row-main">
-        <component
-          :is="isTabAllowed(item.path) ? 'router-link' : 'span'"
+        <!-- 恒定渲染 <a>: 不用 <component :is> 在 router-link/span 间切换,
+             该写法在模式切换(component↔element 类型变化)时会导致 Vue patch 丢失节点,
+             泄漏裸文本节点(表现为标签重复/黑底白字窄条) -->
+        <a
           v-for="item in mainTabs"
           :key="item.path"
-          :to="isTabAllowed(item.path) ? item.path : undefined"
+          :href="isTabAllowed(item.path) ? item.path : undefined"
           class="nav-tab"
-          :class="{ active: route.path === item.path, disabled: !isTabAllowed(item.path) }"
+          :class="{ active: isTabAllowed(item.path) && route.path === item.path, disabled: !isTabAllowed(item.path) }"
           :title="!isTabAllowed(item.path) ? tabLockReason(item.path) : ''"
+          :aria-disabled="!isTabAllowed(item.path)"
+          @click.prevent="onTabClick(item.path)"
         >
           {{ item.label }}
-        </component>
+        </a>
       </div>
       <div class="nav-row nav-row-sub">
-        <component
-          :is="isTabAllowed(item.path) ? 'router-link' : 'span'"
+        <a
           v-for="item in subTabs"
           :key="item.path"
-          :to="isTabAllowed(item.path) ? item.path : undefined"
+          :href="isTabAllowed(item.path) ? item.path : undefined"
           class="nav-tab"
-          :class="{ active: route.path === item.path, disabled: !isTabAllowed(item.path) }"
+          :class="{ active: isTabAllowed(item.path) && route.path === item.path, disabled: !isTabAllowed(item.path) }"
           :title="!isTabAllowed(item.path) ? tabLockReason(item.path) : ''"
+          :aria-disabled="!isTabAllowed(item.path)"
+          @click.prevent="onTabClick(item.path)"
         >
           {{ item.label }}
-        </component>
+        </a>
       </div>
     </div>
 
@@ -186,6 +191,7 @@ const mainTabs = [
 ]
 
 const subTabs = [
+  { path: '/aircraft', label: 'AIRCRAFT STATUS', title: '飞机状态' },
   { path: '/fault', label: 'FAILURE REPORTS', title: '失效报告' },
   { path: '/groundtest', label: 'GROUND TEST', title: '地面测试' },
   { path: '/nvmreset', label: 'DATA RESET', title: '数据重置' },
@@ -219,9 +225,21 @@ const holding = computed(() => modeInfo.hold_elapsed > 0 && modeInfo.hold_remain
 
 const isTabAllowed = (path) => isPathAllowed(path)
 
+// TAB 点击: 禁用态直接忽略; LOGOUT 走登出; 其余 SPA 内部跳转 (始终 preventDefault 避免整页刷新)
+const onTabClick = (path) => {
+  if (!isTabAllowed(path)) return
+  if (path === '/login') {
+    logout()
+    return
+  }
+  if (route.path !== path) router.push(path)
+}
+
 const tabLockReason = (path) => {
-  if (systemMode.value === 'maintenance') return '维护模式下仅可访问地面测试与数据加载'
-  return '正常模式下不可访问地面测试与数据加载 (需维护模式)'
+  if (systemMode.value === 'maintenance') {
+    return '维护模式下仅可访问地面测试/数据加载/数据重置/数据下载/生命周期及飞机状态、发动机配平等跨模式业务'
+  }
+  return '正常模式下不可访问地面测试/数据加载/数据重置/数据下载/生命周期 (需维护模式)'
 }
 
 // ---------- 信号模拟 ----------
@@ -339,7 +357,6 @@ onUnmounted(() => {
   display: flex;
   gap: 4px;
   margin-bottom: 4px;
-  justify-content: space-between;
 }
 
 .nav-row-main .nav-tab,
@@ -352,14 +369,14 @@ onUnmounted(() => {
   display: block;
   padding: 8px 8px;
   background: #444444;
-  color: #000000;
+  color: #dddddd;
   font-size: 12px;
   font-weight: bold;
   text-decoration: none;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
-  transition: background 0.15s, color 0.15s;
+  /* 不使用 transition: clip-path + transition 会触发 Chrome 合成层残留(幽灵标签), 状态须瞬时切换 */
   white-space: nowrap;
   user-select: none;
 }
@@ -380,6 +397,7 @@ onUnmounted(() => {
   color: #555555;
   cursor: not-allowed;
   border-bottom: 2px solid #333333;
+  font-weight: normal;
 }
 
 .nav-tab.disabled:hover {

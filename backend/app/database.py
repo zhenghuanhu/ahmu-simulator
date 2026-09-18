@@ -449,3 +449,53 @@ class NVMResetResult(Base):
     __table_args__ = (
         Index("idx_nvm_reset_result_resetid", "reset_id"),
     )
+
+
+class AircraftStatusRecord(Base):
+    """飞机状态消息记录表 (4.3.7 飞机状态消息)
+
+    记录 OHMS 周期性发布的飞机状态消息快照, 用于追溯飞行阶段/航段变化
+    """
+    __tablename__ = "aircraft_status_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    flight_leg = Column(Integer, default=0, index=True)       # OHMS 飞行航段 (-128~127)
+    flight_phase = Column(Integer, default=0, index=True)     # OHMS 飞行阶段 (1~15)
+    global_abort_flag = Column(Boolean, default=False)        # 全局终止标志
+    source = Column(String(10), default="left")               # 数据源 (left/right)
+    icao_code = Column(String(10))                            # ICAO 应答机码
+    registration = Column(String(20))                         # 注册号
+    flight_number = Column(String(20))                        # 航班号
+    departure_airport = Column(String(10))                    # 出发机场
+    destination_airport = Column(String(10))                  # 目的地机场
+    phase_name = Column(String(50))                           # 飞行阶段名称
+    air_ground = Column(String(10))                           # 空地状态
+    airspeed = Column(Float)                                  # 空速 (kts)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_air_status_leg_phase", "flight_leg", "flight_phase"),
+    )
+
+
+class LifecycleRetrievalLog(Base):
+    """生命周期获取日志表 (4.3.11 生命周期管理)
+
+    记录每次生命周期数据获取操作 (操作时间/操作用户/被操作的设备/操作状态)
+    """
+    __tablename__ = "lifecycle_retrieval_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    equip_id = Column(String(50), nullable=False, index=True)  # 设备ID (如 LRU001)
+    equip_name = Column(String(100))                           # 设备名称
+    member_system = Column(String(50), index=True)             # 成员系统 (如 MEM001)
+    operator = Column(String(50), default="TEST")              # 操作用户
+    status = Column(String(20), default="success", index=True) # success/failed/rejected
+    power_on_time = Column(Integer, default=0)                 # 上电运行时间 (秒)
+    power_cycle_count = Column(Integer, default=0)             # 上电循环计数
+    error_message = Column(Text, nullable=True)                # 失败/拒绝原因
+    operated_at = Column(DateTime, default=datetime.utcnow, index=True)  # 操作时间
+
+    __table_args__ = (
+        Index("idx_lifecycle_log_equip_time", "equip_id", "operated_at"),
+    )

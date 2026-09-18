@@ -22,6 +22,7 @@ from app.services.print_mgr import print_service
 from app.services.engine_trim import engine_trim_service
 from app.services.nvm_reset import nvm_reset_service
 from app.services.nvm_download import nvm_download_service
+from app.services.aircraft_status import aircraft_status_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -285,11 +286,23 @@ async def get_tc_status(
 
 
 @router.post("/lifecycle/retrieve/{equip_id}")
-async def trigger_tc_retrieval(equip_id: str):
+async def trigger_tc_retrieval(equip_id: str, operator: str = "TEST"):
     """触发单个设备时间周期获取 (对应 tcRetrieval + TimeCycle_MS)
-    模拟ARINC A429/A664通信: 发送获取命令 → 成员系统响应 → 更新数据
+    仅维护模式下可获取; 模拟ARINC A429/A664通信: 发送获取命令 → 成员系统响应 → 更新数据
     """
-    return await lifecycle_service.trigger_retrieval(equip_id)
+    return await lifecycle_service.trigger_retrieval(equip_id, operator)
+
+
+@router.get("/lifecycle/logs")
+async def get_lifecycle_logs(
+    status: Optional[str] = None,
+    equip_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """查询生命周期获取日志 (操作时间/操作用户/被操作的设备/操作状态)"""
+    return lifecycle_service.get_retrieval_logs(db, status, equip_id, page, size)
 
 
 @router.post("/lifecycle/batch-retrieve")
@@ -552,3 +565,38 @@ async def print_nvm_download_result(download_id: str):
 async def get_nvm_download_status():
     """查询数据下载管理功能整体状态"""
     return nvm_download_service.get_download_status()
+
+
+# ==================== 飞机状态消息 (4.3.7) ====================
+
+@router.get("/aircraft-status")
+async def get_aircraft_status():
+    """查询最新飞机状态消息 (OHMS 阶段/航段/全局终止标志等)"""
+    return aircraft_status_service.get_latest_message()
+
+
+@router.get("/aircraft-status/status")
+async def get_aircraft_status_service():
+    """查询飞机状态服务整体状态"""
+    return aircraft_status_service.get_status()
+
+
+@router.post("/aircraft-status/signal")
+async def set_aircraft_status_signal(payload: dict):
+    """注入飞机状态信号 (模拟从起落架/大气/飞管等系统接收信号)
+
+    请求体示例:
+      {"source": "left", "param": "airspeed", "value": 250.0, "valid": true}
+      {"source": "right", "param": "air_ground_status", "value": "air", "valid": true}
+    """
+    source = payload.get("source", "left")
+    param = payload.get("param", "")
+    value = payload.get("value")
+    valid = payload.get("valid", True)
+    return aircraft_status_service.set_source_signal(source, param, value, valid)
+
+
+@router.post("/aircraft-status/identity")
+async def set_aircraft_identity(payload: dict):
+    """设置飞机身份信息 (由飞管系统/ATC提供: ICAO码/注册号/航班号/机场)"""
+    return aircraft_status_service.set_aircraft_identity(payload)

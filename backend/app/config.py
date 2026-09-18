@@ -108,6 +108,43 @@ NVM_DOWNLOAD_CONFIG = {
     "progress_steps": 20,                        # 进度递增步数 (每步 ~0.1s)
 }
 
+# 飞机状态消息功能配置 (4.3.7 飞机状态消息)
+# 需求: 1Hz周期性发布OHMS飞机状态消息; 双源(左/右)8参数计算飞行阶段1-15;
+#       接收起落架轮载/大气空速/飞管尾号+航班号信号
+AIRCRAFT_STATUS_CONFIG = {
+    "publish_period_ms": 1000,       # 发布周期 1Hz (1000ms)
+    "port_a664": 34896,              # A664 飞机状态消息端口
+    "port_a429": 34897,              # A429 飞机状态消息端口
+    "port_a825": 0x600,              # A825 飞机状态消息 CAN ID (备份通道)
+    # 飞机身份信息 (由其他系统提供: 飞管系统/ATC等)
+    "icao_code": "780123",           # ICAO 应答机码 (24bit, 八进制)
+    "registration": "B-001A",        # 注册号 (飞机尾号)
+    "flight_number": "CXF001",       # 航班号
+    "departure_airport": "ZSPD",     # 出发机场 (浦东)
+    "destination_airport": "ZBAA",   # 目的地机场 (首都)
+    # 飞行阶段判定阈值
+    "airspeed_liftoff_kts": 120.0,   # 离地/起飞空速阈值
+    "airspeed_taxi_kts": 30.0,       # 滑行空速阈值
+    "ground_speed_taxi_kts": 3.0,    # 滑行地速阈值
+    "altitude_cruise_ft": 30000.0,   # 巡航高度
+    "altitude_approach_ft": 8000.0,  # 进近高度
+    "altitude_rate_climb_fpm": 300.0,  # 爬升高度变化率阈值 (ft/min)
+    "altitude_rate_cruise_fpm": 200.0, # 巡航高度变化率容差 (ft/min)
+    "thrust_takeoff_deg": 40.0,      # 起飞推力油门角度阈值 (度)
+    "thrust_idle_deg": 15.0,         # 怠速油门角度阈值 (度)
+    # 双源参数有效性: 左源失效时切换到右源
+    "dual_source_params": [
+        "air_ground_status",           # 空地状态 (起落架)
+        "airspeed",                    # 空速 (大气)
+        "ground_speed",                # 地速 (惯导/飞管)
+        "fcm_corrected_altitude_rate", # FCM修正高度变化率 (飞控)
+        "engine_thrust_lever_angle",   # 发动机油门推力角度 (发动机)
+        "flight_altitude",             # 飞行高度 (大气)
+        "brake_status",                # 刹车状态 (刹车系统)
+        "maintenance_switch_position", # 维护开关位置 (驾驶舱控制板)
+    ],
+}
+
 # 维护模式条件 (三者同时满足且持续超过30s)
 #   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {
