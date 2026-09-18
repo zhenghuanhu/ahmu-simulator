@@ -4,6 +4,7 @@ API路由层 - REST API + WebSocket端点
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, Path
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 import json
@@ -249,49 +250,7 @@ async def batch_verify_config(count: int = 400, db: Session = Depends(get_db)):
     return config_service.batch_verify(db, count)
 
 
-# ==================== 生命周期 (时间周期) ====================
-
-@router.get("/lifecycle/atas")
-async def get_tc_atas(
-    page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=200),
-):
-    """获取ATA分类列表 (对应 message 2306: TCATAsRequest)"""
-    return lifecycle_service.get_tcatas(page, size)
-
-
-@router.get("/lifecycle/equips")
-async def get_tc_equips(
-    ata: Optional[str] = None,
-    page: int = Query(1, ge=1),
-    size: int = Query(16, ge=1, le=100),
-):
-    """获取设备列表 (对应 message 2307: TCEquipsRequest)
-    ata: ATA章节号, 如 "21". 不传则返回全部
-    """
-    return lifecycle_service.get_tc_equips(ata, page, size)
-
-
-@router.get("/lifecycle/status")
-async def get_tc_status(
-    page: int = Query(1, ge=1),
-    size: int = Query(2000, ge=1, le=5000),
-    sortClass: int = Query(1, ge=1, le=2),
-    sortType: int = Query(1, ge=1, le=2),
-):
-    """获取时间周期状态列表 (对应 message 2305: TCStatusRequest)
-    status字段含':'表示时间格式(HH:MM:SS), 即获取成功
-    """
-    return lifecycle_service.get_tc_status(page, size, sortClass, sortType)
-
-
-@router.post("/lifecycle/retrieve/{equip_id}")
-async def trigger_tc_retrieval(equip_id: str, operator: str = "TEST"):
-    """触发单个设备时间周期获取 (对应 tcRetrieval + TimeCycle_MS)
-    仅维护模式下可获取; 模拟ARINC A429/A664通信: 发送获取命令 → 成员系统响应 → 更新数据
-    """
-    return await lifecycle_service.trigger_retrieval(equip_id, operator)
-
+# ==================== 生命周期 (成员系统生命周期数据) ====================
 
 @router.get("/lifecycle/logs")
 async def get_lifecycle_logs(
@@ -301,25 +260,31 @@ async def get_lifecycle_logs(
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """查询生命周期获取日志 (操作时间/操作用户/被操作的设备/操作状态)"""
+    """查询生命周期获取日志 (操作时间/操作用户/被操作的成员系统/操作状态)"""
     return lifecycle_service.get_retrieval_logs(db, status, equip_id, page, size)
 
 
-@router.post("/lifecycle/batch-retrieve")
-async def batch_retrieve_lifecycle(count: int = 200):
-    """批量获取时间周期 (200个成员系统)"""
-    return await lifecycle_service.batch_retrieve(count)
+@router.get("/lifecycle/members")
+async def get_lifecycle_members():
+    """获取成员系统列表 (含各自生命周期数据), 用于前端成员系统下拉选择"""
+    return lifecycle_service.get_member_systems()
 
 
-@router.get("/lifecycle/list")
-async def get_lifecycle_list(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    member: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
-    """获取生命周期数据列表"""
-    return lifecycle_service.get_lifecycle_data(db, member, page, size)
+@router.post("/lifecycle/member-retrieve/{member}")
+async def retrieve_member_lifecycle(member: str, operator: str = "TEST"):
+    """查看成员系统生命周期信息: 向成员系统发出生命周期获取指令, 并返回其生命周期信息"""
+    return await lifecycle_service.retrieve_member(member, operator)
+
+
+class LifecycleSaveRequest(BaseModel):
+    storage_path: Optional[str] = None   # 用户选择的存储目录 (绝对路径)
+    member_system: Optional[str] = None  # 可选, 仅保存指定成员系统
+
+
+@router.post("/lifecycle/save")
+async def save_lifecycle_data(req: LifecycleSaveRequest):
+    """主动存储: 将采集到的成员系统生命周期数据保存到用户选择路径"""
+    return lifecycle_service.save_lifecycle_data(req.storage_path, req.member_system)
 
 
 # ==================== ICD管理 ====================
