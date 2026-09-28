@@ -167,6 +167,47 @@ class QuickAccessList(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ParamConfig(Base):
+    """参数基本配置表 - 参数监控功能
+    对应 AHMU 供应商配置工具的参数配置项:
+      基础: 参数名称/参数类型/参数采样频率/参数采样精度/参数单位/参数是否记录/参数是否显示
+      记录: 参数记录精度/参数记录频率/参数开始记录逻辑/参数结束记录逻辑
+    """
+    __tablename__ = "param_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    param_name = Column(String(100), nullable=False, unique=True, index=True)  # 参数名称
+    param_type = Column(String(30), default="float")        # 参数类型 int/float/bool/string
+    sample_rate = Column(Integer, default=1)                # 采样频率 (Hz)
+    sample_precision = Column(Integer, default=2)           # 采样精度 (小数位)
+    param_unit = Column(String(20))                         # 参数单位
+    is_recorded = Column(Boolean, default=True)             # 参数是否记录
+    is_displayed = Column(Boolean, default=True)            # 参数是否显示
+    record_precision = Column(Integer, default=2)           # 参数记录精度 (小数位)
+    record_rate = Column(Integer, default=1)                # 参数记录频率 (Hz)
+    record_start_logic = Column(String(100))                # 参数开始记录逻辑
+    record_stop_logic = Column(String(100))                 # 参数结束记录逻辑
+    ata_chapter = Column(String(10), index=True)            # 参数所属 ATA 章节
+    source_member = Column(String(50), nullable=True)       # 参数来源成员系统 (如 HF_HSCU)
+    min_val = Column(Float, nullable=True)                  # 参数最小值
+    max_val = Column(Float, nullable=True)                  # 参数最大值
+
+
+class ParamReport(Base):
+    """参数报告表 - 参数监控功能
+    参数报告标识/参数个数/参数内容/下传状态
+    """
+    __tablename__ = "param_reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    report_id = Column(String(50), nullable=False, index=True)  # 参数报告标识 (如 PR-20260928-160000)
+    param_count = Column(Integer, default=0)                    # 参数个数
+    data_json = Column(Text)                                    # 报告内容 JSON
+    download_status = Column(String(20), default="stored")      # stored/downloaded
+    file_path = Column(String(300), nullable=True)              # 下传文件路径
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class StartupTest(Base):
     """启动测试记录表"""
     __tablename__ = "startup_tests"

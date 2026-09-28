@@ -24,9 +24,10 @@ export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset', 
  * 两种模式下始终可访问的页面 (跨模式业务)
  * 发动机配平(Engine Trim)指令同时来自地面 HMI 与驾驶舱/PMAT,
  * 飞机状态(Aircraft Status)在正常/维护模式下均持续生成发布,
- * 属跨维护/正常模式业务, 不应被任一模式禁用隐藏。
+ * 界面配置(Interface Settings)为系统级设置, 均属跨维护/正常模式业务,
+ * 不应被任一模式禁用隐藏。
  */
-export const ALWAYS_ALLOWED_PATHS = ['/enginetrim', '/aircraft']
+export const ALWAYS_ALLOWED_PATHS = ['/enginetrim', '/aircraft', '/settings']
 
 /** 判断路径在当前模式下是否可访问 */
 export function isPathAllowed(path, mode = systemMode.value) {

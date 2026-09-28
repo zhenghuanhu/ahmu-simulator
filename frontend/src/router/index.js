@@ -28,6 +28,7 @@ const routes = [
       { path: 'print', name: 'Print', component: () => import('../views/Print.vue'), meta: { title: 'Print' } },
       { path: 'icd', name: 'ICD', component: () => import('../views/ICDManagement.vue'), meta: { title: 'ICD' } },
       { path: 'utility', name: 'Utility', component: () => import('../views/Dashboard.vue'), meta: { title: 'Utility' } },
+      { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '界面配置' } },
       { path: 'lru', name: 'LRU', component: () => import('../views/FaultDiagnosis.vue'), meta: { title: 'LRU Fault History' } },
     ],
   },

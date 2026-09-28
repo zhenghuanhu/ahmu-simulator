@@ -164,14 +164,33 @@ async def resolve_fault(fault_id: str, db: Session = Depends(get_db)):
 
 @router.get("/params/list")
 async def get_param_list(ata: Optional[str] = None, db: Session = Depends(get_db)):
-    """获取参数列表"""
+    """获取参数列表 (支持按 ATA 章节查询)"""
     return {"items": param_service.get_param_list(db, ata)}
+
+
+@router.get("/params/atas")
+async def get_param_atas():
+    """获取参数涉及的 ATA 章节列表"""
+    return {"items": param_service.get_ata_chapters()}
 
 
 @router.get("/params/history/{name}")
 async def get_param_history(name: str, limit: int = 100, db: Session = Depends(get_db)):
     """获取参数历史"""
     return {"name": name, "items": param_service.get_param_history(db, name, limit)}
+
+
+@router.get("/params/report")
+async def get_param_report(ata: Optional[str] = None, db: Session = Depends(get_db)):
+    """获取参数报告 (参数报告标识/参数个数/参数名称/参数类型/参数数值/参数单位/参数记录时间/参数所属ATA)"""
+    return param_service.get_param_report(db, ata)
+
+
+@router.post("/params/report/download")
+async def download_param_report(payload: dict = None, db: Session = Depends(get_db)):
+    """下传参数报告 (生成 JSON 文件)"""
+    report_id = (payload or {}).get("report_id")
+    return param_service.download_param_report(db, report_id)
 
 
 @router.get("/params/quicklists")
@@ -181,10 +200,56 @@ async def get_quick_lists(db: Session = Depends(get_db)):
 
 
 @router.post("/params/quicklists")
-async def create_quick_list(name: str, params: list[str], db: Session = Depends(get_db)):
+async def create_quick_list(payload: dict, db: Session = Depends(get_db)):
     """创建快捷访问列表"""
+    name = payload.get("name", "")
+    params = payload.get("params", [])
     list_id = param_service.create_quick_list(db, name, params)
     return {"status": "ok", "list_id": list_id}
+
+
+@router.put("/params/quicklists/{list_id}")
+async def update_quick_list(list_id: int, name: Optional[str] = None,
+                            params: Optional[list[str]] = None, db: Session = Depends(get_db)):
+    """修改快捷访问列表 (名称/参数)"""
+    return param_service.update_quick_list(db, list_id, name, params)
+
+
+@router.delete("/params/quicklists/{list_id}")
+async def delete_quick_list(list_id: int, db: Session = Depends(get_db)):
+    """删除快捷访问列表"""
+    return param_service.delete_quick_list(db, list_id)
+
+
+@router.post("/params/quicklists/{list_id}/params/{param_name}")
+async def add_param_to_list(list_id: int, param_name: str, db: Session = Depends(get_db)):
+    """向快捷访问列表增加参数"""
+    return param_service.add_param_to_list(db, list_id, param_name)
+
+
+@router.delete("/params/quicklists/{list_id}/params/{param_name}")
+async def remove_param_from_list(list_id: int, param_name: str, db: Session = Depends(get_db)):
+    """从快捷访问列表删除参数"""
+    return param_service.remove_param_from_list(db, list_id, param_name)
+
+
+@router.post("/params/monitor-service")
+async def set_monitor_service(member_system: str, enabled: bool):
+    """成员系统启动或禁用飞机参数监控服务"""
+    return param_service.set_monitor_service(member_system, enabled)
+
+
+@router.get("/params/monitor-services")
+async def get_monitor_services():
+    """获取成员系统参数监控服务状态"""
+    return param_service.get_monitor_services()
+
+
+@router.post("/params/paa")
+async def receive_paa_params(payload: dict):
+    """接收 PAA 转发的参数, 用于飞机运行数据存储"""
+    params = (payload or {}).get("params", [])
+    return param_service.receive_paa_params(params)
 
 
 # ==================== 启动测试 ====================

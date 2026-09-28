@@ -16,7 +16,8 @@
           :aria-disabled="!isTabAllowed(item.path)"
           @click.prevent="onTabClick(item.path)"
         >
-          {{ item.label }}
+          <span class="nav-tab-en">{{ labelMode === 'zh' ? item.title : item.label }}</span>
+          <span v-if="labelMode === 'bilingual'" class="nav-tab-zh">{{ item.title }}</span>
         </a>
       </div>
       <div class="nav-row nav-row-sub">
@@ -30,7 +31,8 @@
           :aria-disabled="!isTabAllowed(item.path)"
           @click.prevent="onTabClick(item.path)"
         >
-          {{ item.label }}
+          <span class="nav-tab-en">{{ labelMode === 'zh' ? item.title : item.label }}</span>
+          <span v-if="labelMode === 'bilingual'" class="nav-tab-zh">{{ item.title }}</span>
         </a>
       </div>
     </div>
@@ -153,10 +155,12 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWebSocket } from '../composables/useWebSocket'
 import { systemMode, setSystemMode, isPathAllowed, fallbackPath, fetchSystemMode } from '../composables/useSystemMode'
+import { useLabelMode } from '../composables/useUiConfig'
 
 const route = useRoute()
 const router = useRouter()
 const { connected: wsConnected, on } = useWebSocket()
+const { labelMode } = useLabelMode()
 
 const currentUser = ref(localStorage.getItem('ahmu_user') || 'TEST')
 
@@ -187,11 +191,12 @@ const mainTabs = [
   { path: '/params', label: 'CONDITION MONITORING', title: '参数显示' },
   { path: '/dataload', label: 'DATA LOAD', title: '数据加载' },
   { path: '/utility', label: 'UTILITY', title: '工具' },
+  { path: '/settings', label: 'INTERFACE SETTINGS', title: '界面配置' },
   { path: '/login', label: 'LOGOUT', title: '退出' },
 ]
 
 const subTabs = [
-  { path: '/aircraft', label: 'AIRCRAFT STATUS', title: '飞机状态' },
+  { path: '/aircraft', label: 'AIRCRAFT STATUS', title: '飞机状态消息' },
   { path: '/fault', label: 'FAILURE REPORTS', title: '失效报告' },
   { path: '/groundtest', label: 'GROUND TEST', title: '地面测试' },
   { path: '/nvmreset', label: 'DATA RESET', title: '数据重置' },
@@ -366,19 +371,40 @@ onUnmounted(() => {
 }
 
 .nav-tab {
-  display: block;
-  padding: 8px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
   background: #444444;
   color: #dddddd;
-  font-size: 12px;
-  font-weight: bold;
   text-decoration: none;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  line-height: 1.3;
   clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
   /* 不使用 transition: clip-path + transition 会触发 Chrome 合成层残留(幽灵标签), 状态须瞬时切换 */
   white-space: nowrap;
   user-select: none;
+}
+
+/* 标签英文行 (双语/纯英文模式) */
+.nav-tab-en {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* 标签中文行 (仅双语模式) */
+.nav-tab-zh {
+  font-size: 10px;
+  font-weight: normal;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .nav-tab:hover {
