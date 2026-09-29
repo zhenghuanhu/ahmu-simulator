@@ -238,10 +238,10 @@ class ParamMonitorService:
     # ==================== 参数查询 ====================
 
     def get_param_list(self, db: Session, ata: Optional[str] = None) -> list:
-        """获取参数列表 (支持按 ATA 章节查询)"""
+        """获取参数列表 (支持按 ATA 章节查询, 章节号前缀匹配如 "34" 匹配 "34-01")"""
         params = []
         for name, config in self._params.items():
-            if ata and config["ata"] != ata:
+            if ata and not config["ata"].startswith(ata):
                 continue
             params.append({**config, "value": self._latest_values.get(name, {}).get("value"),
                            "validity": self._latest_values.get(name, {}).get("validity", "valid")})
@@ -274,7 +274,7 @@ class ParamMonitorService:
         report_id = f"PR-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         params = []
         for name, config in self._params.items():
-            if ata and config["ata"] != ata:
+            if ata and not config["ata"].startswith(ata):
                 continue
             latest = self._latest_values.get(name, {})
             params.append({

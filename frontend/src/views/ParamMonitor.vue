@@ -24,6 +24,46 @@
       <span v-if="memberStatus" class="ohms-cyan" style="font-size: var(--pm-fs-body);">{{ memberStatus }}</span>
     </div>
 
+    <!-- 参数查询与选择 (按 ATA 查询 + 勾选保存为快捷列表) -->
+    <div class="ohms-panel pm-query-panel">
+      <div class="pm-panel-header">
+        <span class="ohms-title" style="font-size: var(--pm-fs-panel);">PARAMETER QUERY / 参数查询与选择</span>
+        <span class="ohms-dim" style="margin-left: 12px; font-size: var(--pm-fs-body);">{{ paramList.length }} 个结果</span>
+        <span style="flex: 1;"></span>
+        <input v-model="saveListName" class="pm-input pm-input-sm" placeholder="快捷列表名称" />
+        <el-button
+          size="small"
+          type="primary"
+          @click="saveSelectedAsList"
+          :disabled="selectedParams.length === 0 || !saveListName.trim()"
+        >
+          保存选中为快捷列表 ({{ selectedParams.length }})
+        </el-button>
+      </div>
+      <el-table
+        :data="paramList"
+        ref="paramTableRef"
+        size="small"
+        max-height="320"
+        :row-key="(row) => row.name"
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="40" :reserve-selection="true" />
+        <el-table-column prop="name" label="参数名称" min-width="160" />
+        <el-table-column prop="type" label="参数类型" width="90" />
+        <el-table-column prop="unit" label="参数单位" width="90" />
+        <el-table-column prop="ata" label="参数所属ATA" width="110" />
+        <el-table-column label="参数数值" width="120">
+          <template #default="{ row }">{{ formatValue(row) }}</template>
+        </el-table-column>
+        <el-table-column label="有效性" width="120">
+          <template #default="{ row }">
+            <span :class="validityClass(row)">{{ validityText(row.validity) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
     <!-- 实时参数网格 -->
     <div class="ohms-panel pm-grid-panel">
       <div class="pm-panel-header">
@@ -156,6 +196,11 @@ const selectedListId = ref(null)
 const selectedListParams = ref([])
 const newListName = ref('')
 const addParamName = ref(null)
+
+// 参数查询与选择
+const selectedParams = ref([])
+const saveListName = ref('')
+const paramTableRef = ref(null)
 
 const api = (path) => {
   const port = window.location.port === '5173' ? '8443' : window.location.port
@@ -314,6 +359,41 @@ const removeParamFromList = (name) => {
     })
 }
 
+// 参数查询面板: 勾选变化
+const onSelectionChange = (rows) => {
+  selectedParams.value = rows
+}
+
+// 将勾选的参数保存为快捷访问列表
+const saveSelectedAsList = () => {
+  const name = saveListName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入快捷列表名称')
+    return
+  }
+  if (selectedParams.value.length === 0) {
+    ElMessage.warning('请先勾选要保存的参数')
+    return
+  }
+  const params = selectedParams.value.map(r => r.name)
+  fetch(api('/api/v1/params/quicklists'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, params }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        saveListName.value = ''
+        ElMessage.success(`快捷列表「${name}」已保存 (${params.length} 个参数)`)
+        fetchQuickLists()
+      } else {
+        ElMessage.error(data.message || '保存失败')
+      }
+    })
+    .catch(() => { ElMessage.error('Network error') })
+}
+
 const formatValue = (p) => {
   if (p?.value === undefined || p?.value === null) return '--'
   if (typeof p.value === 'number') return p.value.toFixed(p.value % 1 === 0 ? 0 : 2)
@@ -391,6 +471,7 @@ onMounted(() => {
 }
 
 .pm-grid-panel,
+.pm-query-panel,
 .pm-report-panel,
 .pm-quicklist-panel {
   padding: 0;
@@ -490,6 +571,11 @@ onMounted(() => {
 .pm-input:focus {
   outline: none;
   border-color: #00ccff;
+}
+
+.pm-input-sm {
+  width: 180px;
+  flex: none;
 }
 
 .pm-ql-list {
