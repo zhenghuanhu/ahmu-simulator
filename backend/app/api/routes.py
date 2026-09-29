@@ -315,6 +315,44 @@ async def batch_verify_config(count: int = 400, db: Session = Depends(get_db)):
     return config_service.batch_verify(db, count)
 
 
+@router.get("/config/members")
+async def get_config_members():
+    """获取成员系统列表 (含构型报告/错误报告状态), 供前端成员系统下拉选择"""
+    return config_service.get_member_systems()
+
+
+@router.post("/config/request/{member}")
+async def request_member_config(member: str, operator: str = "TEST"):
+    """维护人员请求某成员系统构型报告: 发出构型获取指令并返回构型信息"""
+    return await config_service.request_member_config(member, operator)
+
+
+@router.get("/config/member/{member}")
+async def get_member_config(member: str):
+    """获取某成员系统构型信息 (当前构型 vs 基本构型, 含一致性)"""
+    return config_service.get_member_config(member)
+
+
+@router.get("/config/error-reports")
+async def get_config_error_reports(
+    member: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    """获取构型错误报告列表"""
+    return config_service.get_error_reports(member, page, size)
+
+
+@router.get("/config/base")
+async def get_base_config(
+    member: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+):
+    """获取飞机基本构型报告"""
+    return config_service.get_base_config(member, page, size)
+
+
 # ==================== 生命周期 (成员系统生命周期数据) ====================
 
 @router.get("/lifecycle/logs")

@@ -125,6 +125,52 @@ class ConfigReport(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class BaseConfig(Base):
+    """飞机基本构型报告表 (4.3.13 构型管理) - 构型比对基准"""
+    __tablename__ = "base_configs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    config_item = Column(String(100), nullable=False)    # MF/MFR/PNR/SER/DMF/SW_PN/SW_LOC
+    config_value = Column(Text)                          # 基本构型值
+    config_type = Column(String(30), default="hardware") # hardware/software
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_base_member_item", "member_system", "config_item", unique=True),
+    )
+
+
+class MemberConfig(Base):
+    """成员系统构型报告快照表 (4.3.13 构型管理) - 每成员系统每构型项一份, 周期更新"""
+    __tablename__ = "member_configs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    config_item = Column(String(100), nullable=False)
+    config_value = Column(Text)
+    config_type = Column(String(30), default="hardware")
+    report_time = Column(DateTime, default=datetime.utcnow, index=True)  # 本周期接收时间
+
+    __table_args__ = (
+        Index("idx_member_config_item", "member_system", "config_item", unique=True),
+    )
+
+
+class ConfigErrorReport(Base):
+    """构型错误报告表 (4.3.13 构型管理) - 接收构型与基本构型不一致时生成"""
+    __tablename__ = "config_error_reports"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    error_report_id = Column(String(40), nullable=False, index=True)  # CE-时间戳-成员系统
+    member_system = Column(String(50), nullable=False, index=True)
+    config_item = Column(String(100), nullable=False)
+    received_value = Column(Text)      # 接收到的构型值
+    expected_value = Column(Text)      # 基本构型期望值
+    config_type = Column(String(30), default="hardware")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class LifecycleData(Base):
     """生命周期数据表 (旧版, 保留兼容)"""
     __tablename__ = "lifecycle_data"
