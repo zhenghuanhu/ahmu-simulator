@@ -188,24 +188,25 @@ const pageTitle = computed(() => {
 
 const mainTabs = [
   { path: '/dashboard', label: 'CENTRAL MAINTENANCE', title: '系统总览' },
-  { path: '/params', label: 'CONDITION MONITORING', title: '参数显示' },
-  { path: '/dataload', label: 'DATA LOAD', title: '数据加载' },
-  { path: '/utility', label: 'UTILITY', title: '工具' },
+  { path: '/params', label: 'PARAMETER MONITORING', title: '参数监控' },
   { path: '/settings', label: 'INTERFACE SETTINGS', title: '界面配置' },
   { path: '/login', label: 'LOGOUT', title: '退出' },
 ]
 
 const subTabs = [
-  { path: '/aircraft', label: 'AIRCRAFT STATUS', title: '飞机状态消息' },
-  { path: '/fault', label: 'FAILURE REPORTS', title: '失效报告' },
-  { path: '/groundtest', label: 'GROUND TEST', title: '地面测试' },
+  // 维护模式功能 (连续排列, 便于维护操作)
+  { path: '/groundtest', label: 'STARTUP TEST', title: '启动测试' },
+  { path: '/dataload', label: 'DATA LOAD', title: '数据加载' },
   { path: '/nvmreset', label: 'DATA RESET', title: '数据重置' },
   { path: '/nvmdownload', label: 'DATA DOWNLOAD', title: '数据下载' },
+  { path: '/lifecycle', label: 'TIME CYCLE', title: '生命周期' },
+  // 正常模式功能
+  { path: '/aircraft', label: 'AIRCRAFT STATUS', title: '飞机状态消息' },
+  { path: '/fault', label: 'FAULT DIAGNOSIS', title: '故障诊断' },
   { path: '/enginetrim', label: 'ENGINE TRIM', title: '发动机配平' },
   { path: '/events', label: 'EVENT REPORTS', title: '事件报告' },
-  { path: '/lifecycle', label: 'TIME CYCLE', title: '生命周期' },
-  { path: '/lru', label: 'LRU FAULT HISTORY', title: 'LRU故障历史' },
-  { path: '/config', label: 'CONFIGURATION REPORTS', title: '构型报告' },
+  { path: '/print', label: 'PRINT', title: '打印管理' },
+  { path: '/config', label: 'CONFIGURATION MANAGEMENT', title: '构型管理' },
 ]
 
 const switchOptions = [
@@ -242,9 +243,9 @@ const onTabClick = (path) => {
 
 const tabLockReason = (path) => {
   if (systemMode.value === 'maintenance') {
-    return '维护模式下仅可访问地面测试/数据加载/数据重置/数据下载/生命周期及飞机状态、发动机配平等跨模式业务'
+    return '维护模式下仅可执行启动测试、数据加载、数据重置、数据下载、生命周期相关功能'
   }
-  return '正常模式下不可访问地面测试/数据加载/数据重置/数据下载/生命周期 (需维护模式)'
+  return '正常模式下不可执行启动测试、数据加载、数据重置、数据下载、生命周期 (需维护模式)'
 }
 
 // ---------- 信号模拟 ----------

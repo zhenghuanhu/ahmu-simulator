@@ -14,7 +14,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: 'Central Maintenance' } },
       { path: 'aircraft', name: 'AircraftStatus', component: () => import('../views/AircraftStatus.vue'), meta: { title: 'Aircraft Status' } },
-      { path: 'fault', name: 'FaultDiagnosis', component: () => import('../views/FaultDiagnosis.vue'), meta: { title: 'Failure Reports' } },
+      { path: 'fault', name: 'FaultDiagnosis', component: () => import('../views/FaultDiagnosis.vue'), meta: { title: 'Fault Diagnosis' } },
       { path: 'params', name: 'ParamMonitor', component: () => import('../views/ParamMonitor.vue'), meta: { title: 'Condition Monitoring' } },
       { path: 'events', name: 'EventReports', component: () => import('../views/EventReports.vue'), meta: { title: 'Event Reports' } },
       { path: 'config', name: 'ConfigManagement', component: () => import('../views/ConfigManagement.vue'), meta: { title: 'Configuration Reports' } },
@@ -27,9 +27,7 @@ const routes = [
       { path: 'acars', name: 'ACARS', component: () => import('../views/ACARS.vue'), meta: { title: 'ACARS' } },
       { path: 'print', name: 'Print', component: () => import('../views/Print.vue'), meta: { title: 'Print' } },
       { path: 'icd', name: 'ICD', component: () => import('../views/ICDManagement.vue'), meta: { title: 'ICD' } },
-      { path: 'utility', name: 'Utility', component: () => import('../views/Dashboard.vue'), meta: { title: 'Utility' } },
       { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '界面配置' } },
-      { path: 'lru', name: 'LRU', component: () => import('../views/FaultDiagnosis.vue'), meta: { title: 'LRU Fault History' } },
     ],
   },
 ]

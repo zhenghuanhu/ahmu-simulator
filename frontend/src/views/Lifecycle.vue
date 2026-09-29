@@ -2,7 +2,7 @@
   <div class="tc-container">
     <!-- 顶部操作栏 -->
     <div class="ohms-panel tc-toolbar">
-      <span class="ohms-title" style="font-size: 14px;">TIME CYCLE</span>
+      <span class="ohms-title" style="font-size: 14px;">TIME CYCLE / 生命周期</span>
       <span class="ohms-dim" style="margin-left: 12px; font-size: 12px;">
         {{ memberList.length }} member systems
       </span>

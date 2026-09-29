@@ -10,10 +10,10 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from loguru import logger
 
 from app.config import HOST, PORT, DEBUG, RELOAD, WS_PATH, BASE_DIR
@@ -136,6 +136,42 @@ app.add_middleware(
 
 # 注册API路由
 app.include_router(api_router)
+
+
+# ==================== 维护模式权限校验 ====================
+
+# 维护模式下允许访问的 API 前缀 (对应 5 个维护功能 + 系统端点 + 登录)
+MAINTENANCE_ALLOWED_API_PREFIXES = (
+    "/api/v1/system",        # 系统 (模式查询/切换/信号)
+    "/api/v1/auth",          # 登录
+    "/api/v1/groundtest",    # 启动测试
+    "/api/v1/dataload",      # 数据加载
+    "/api/v1/nvm-reset",     # 数据重置
+    "/api/v1/nvm-download",  # 数据下载
+    "/api/v1/lifecycle",     # 生命周期
+)
+
+
+@app.middleware("http")
+async def maintenance_mode_guard(request: Request, call_next):
+    """维护模式权限校验中间件:
+    维护模式下仅放行启动测试/数据加载/数据重置/数据下载/生命周期相关 API,
+    其余功能 API 返回 403, 杜绝"仅隐藏前端入口但可直接调用后端接口"的绕过。
+    """
+    path = request.url.path
+    if path.startswith("/api/v1"):
+        from app.services.maintenance_mode import maintenance_service
+        if maintenance_service.current_mode == "maintenance":
+            if not any(path.startswith(p) for p in MAINTENANCE_ALLOWED_API_PREFIXES):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "status": "error",
+                        "code": "maintenance_mode_restricted",
+                        "message": "维护模式下仅可执行启动测试、数据加载、数据重置、数据下载、生命周期相关功能",
+                    },
+                )
+    return await call_next(request)
 
 
 # ==================== WebSocket端点 ====================

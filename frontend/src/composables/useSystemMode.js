@@ -2,8 +2,8 @@ import { ref } from 'vue'
 
 /**
  * 系统模式全局状态
- * - normal:       正常模式  → 可访问除维护专属页面(地面测试/数据加载/数据重置/数据下载/生命周期)外的所有页面
- * - maintenance:  维护模式  → 仅可访问维护专属页面 + 跨模式页面(飞机状态/发动机配平)
+ * - normal:       正常模式  → 可访问除维护专属页面(启动测试/数据加载/数据重置/数据下载/生命周期)外的所有页面
+ * - maintenance:  维护模式  → 仅可访问 5 个维护专属页面, 其余功能入口全部禁用/隐藏
  */
 export const systemMode = ref('normal')
 
@@ -17,27 +17,20 @@ export function setSystemMode(mode) {
   }
 }
 
-/** 维护模式下允许访问的页面 (地面测试 / 数据加载 / 数据重置 / 数据下载 / 生命周期) */
-export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset', '/nvmdownload', '/lifecycle']
-
 /**
- * 两种模式下始终可访问的页面 (跨模式业务)
- * 发动机配平(Engine Trim)指令同时来自地面 HMI 与驾驶舱/PMAT,
- * 飞机状态(Aircraft Status)在正常/维护模式下均持续生成发布,
- * 界面配置(Interface Settings)为系统级设置, 均属跨维护/正常模式业务,
- * 不应被任一模式禁用隐藏。
+ * 维护模式下允许访问的页面 (仅 5 个维护功能)
+ * 启动测试 / 数据加载 / 数据重置 / 数据下载 / 生命周期
  */
-export const ALWAYS_ALLOWED_PATHS = ['/enginetrim', '/aircraft', '/settings']
+export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset', '/nvmdownload', '/lifecycle']
 
 /** 判断路径在当前模式下是否可访问 */
 export function isPathAllowed(path, mode = systemMode.value) {
   if (path === '/login') return true
-  // 跨模式页面: 两种模式均放行
-  if (ALWAYS_ALLOWED_PATHS.includes(path)) return true
   if (mode === 'maintenance') {
+    // 维护模式: 仅允许 5 个维护专属页面
     return MAINTENANCE_ONLY_PATHS.includes(path)
   }
-  // 正常模式: 禁止维护专属页面 (地面测试/数据加载/数据重置/数据下载/生命周期)
+  // 正常模式: 禁止维护专属页面
   return !MAINTENANCE_ONLY_PATHS.includes(path)
 }
 

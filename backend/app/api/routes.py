@@ -144,7 +144,7 @@ async def get_fault_history(
 
 
 @router.post("/fault/simulate")
-async def simulate_fault(member: str, code: int, severity: str = "minor"):
+async def simulate_fault(member: str, code: str, severity: str = "minor"):
     """手动模拟故障 (测试用)"""
     return await fault_service.process_fault_report(member, code, severity)
 
@@ -158,6 +158,104 @@ async def resolve_fault(fault_id: str, db: Session = Depends(get_db)):
         })
         return {"status": "ok"}
     return {"status": "error", "message": "故障不存在"}
+
+
+@router.get("/fault/members")
+async def get_fault_members():
+    """获取成员系统列表 (含故障上报频率/失效报告启停状态)"""
+    return fault_service.get_member_systems()
+
+
+@router.get("/fault/model")
+async def get_fault_model(
+    member: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+):
+    """读取故障模型配置 (故障报告定义 + 级联 + FDE关联 + 失效报告关联)"""
+    return fault_service.get_fault_model(member, page, size)
+
+
+@router.get("/fault/relations")
+async def get_failure_relations(
+    failure_code: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+):
+    """读取失效报告与故障报告的逻辑关系"""
+    return fault_service.get_failure_relations(failure_code, page, size)
+
+
+@router.get("/fault/fde")
+async def get_fde_list(
+    active_only: bool = False,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+):
+    """获取 FDE 列表 (active_only=True 仅返回活跃故障关联的 FDE)"""
+    return fault_service.get_fde_list(active_only, page, size)
+
+
+@router.get("/fault/failures")
+async def get_failure_reports(
+    member: Optional[str] = None,
+    segment: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    """获取失效报告列表"""
+    return fault_service.get_failure_list(member, segment, page, size)
+
+
+@router.get("/fault/failures/history/{segment}")
+async def get_failure_history(segment: int = Path(..., ge=-128, le=127)):
+    """历史航段失效报告 (-128~127)"""
+    return fault_service.get_failure_history(segment)
+
+
+@router.get("/fault/lru-reports")
+async def get_lru_reports(segment: Optional[int] = None):
+    """故障整合到单个LRU后的LRU失效报告"""
+    return fault_service.get_lru_reports(segment)
+
+
+@router.post("/fault/member-failure-enable")
+async def set_failure_enabled(member: str, enabled: bool = True):
+    """成员系统启用/禁用失效报告功能"""
+    return fault_service.set_failure_enabled(member, enabled)
+
+
+class FaultInjectRequest(BaseModel):
+    member: str
+    fault_code: str
+    severity: Optional[str] = None
+    duration: int = 0          # 持续时间(秒), >0 则周期发送
+    segment: Optional[int] = None
+
+
+@router.post("/fault/inject")
+async def inject_fault(req: FaultInjectRequest):
+    """成员系统模拟 ICD 故障注入: 设置故障有效, 周期发送, 控制持续时间"""
+    return await fault_service.inject_fault(
+        req.member, req.fault_code, req.severity, req.duration, req.segment)
+
+
+@router.post("/fault/injection/{injection_id}/stop")
+async def stop_fault_injection(injection_id: str):
+    """停止故障注入"""
+    return fault_service.stop_injection(injection_id)
+
+
+@router.get("/fault/injections")
+async def list_fault_injections():
+    """列出活动中的故障注入任务"""
+    return {"items": fault_service.active_injections()}
+
+
+@router.post("/fault/locate-root")
+async def locate_root_fault(failure_code: str, segment: Optional[int] = None):
+    """与/或逻辑运算定位失效报告的根源故障"""
+    return fault_service.locate_root_faults(failure_code, segment)
 
 
 # ==================== 参数监控 ====================

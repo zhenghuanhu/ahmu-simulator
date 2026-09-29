@@ -3,7 +3,7 @@
     <!-- ==================== 1. 获取指令面板 ==================== -->
     <div class="ohms-panel" style="margin-bottom: 16px;">
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <span class="ohms-title" style="font-size: 14px;">NVM DATA DOWNLOAD</span>
+        <span class="ohms-title" style="font-size: 14px;">DATA DOWNLOAD / 数据下载</span>
         <span class="ohms-dim" style="font-size: 12px;">数据下载管理（仅维护模式可获取）</span>
         <span class="status-dot" :class="mode === 'maintenance' ? 'green' : 'red'"></span>
         <span :class="mode === 'maintenance' ? 'ohms-green' : 'ohms-red'" style="font-size: 12px;">

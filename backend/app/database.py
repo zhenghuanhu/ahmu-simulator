@@ -53,6 +53,17 @@ def _migrate_schema():
         "print_jobs": {
             "file_path": "VARCHAR(300)",
         },
+        "fault_reports": {
+            "lru_code": "VARCHAR(50)",
+        },
+        "failure_reports": {
+            "severity": "VARCHAR(20)",
+            "status": "VARCHAR(20)",
+            "root_fault_code": "VARCHAR(50)",
+            "logic_type": "VARCHAR(10)",
+            "lru_code": "VARCHAR(50)",
+            "flight_segment": "INTEGER",
+        },
     }
     try:
         with engine.connect() as conn:
@@ -87,6 +98,7 @@ class FaultReport(Base):
     is_cascaded = Column(Boolean, default=False)                       # 是否级联故障
     parent_fault_id = Column(String(36), ForeignKey("fault_reports.id"), nullable=True)
     fde_code = Column(String(50), nullable=True)                      # 关联FDE代码
+    lru_code = Column(String(50), nullable=True, index=True)          # 所属LRU (故障整合到单个LRU)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     resolved_at = Column(DateTime, nullable=True)
     raw_data = Column(Text)                                            # 原始数据(JSON)
@@ -105,9 +117,80 @@ class FailureReport(Base):
     member_system = Column(String(50), nullable=False, index=True)
     failure_code = Column(String(50), nullable=False, index=True)
     failure_text = Column(Text)
+    severity = Column(String(20), default="minor")                     # 严重程度
+    status = Column(String(20), default="active")                     # active/resolved/suppressed
     fault_report_id = Column(String(36), ForeignKey("fault_reports.id"), nullable=True)
+    root_fault_code = Column(String(50), nullable=True)               # 定位到的根源故障代码
+    logic_type = Column(String(10), default="or")                     # 与根源故障的逻辑关系 and/or
+    lru_code = Column(String(50), nullable=True, index=True)          # 所属LRU
+    flight_segment = Column(Integer, default=0, index=True)           # 航段(-128~127)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     raw_data = Column(Text)
+
+
+class FaultModelConfig(Base):
+    """故障模型配置表 (故障方程/维护模型) - 成员系统故障报告定义 + 级联 + FDE关联 + LRU"""
+    __tablename__ = "fault_model_configs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    fault_code = Column(String(50), nullable=False, index=True)       # 故障代码
+    fault_text = Column(Text)                                          # 故障描述
+    severity = Column(String(20), default="minor")
+    ata_chapter = Column(String(10), index=True)
+    lru_code = Column(String(50), index=True)                          # 所属LRU
+    fde_code = Column(String(50), nullable=True, index=True)          # 关联FDE代码
+    cascade_parents = Column(JSON, default=list)                      # 级联父故障代码列表
+    failure_codes = Column(JSON, default=list)                        # 该故障触发的失效报告代码列表
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fm_member_fault", "member_system", "fault_code", unique=True),
+    )
+
+
+class FailureFaultRelation(Base):
+    """失效报告与故障报告的逻辑关系表 (与/或逻辑)"""
+    __tablename__ = "failure_fault_relations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    failure_code = Column(String(50), nullable=False, index=True)     # 失效报告代码
+    fault_code = Column(String(50), nullable=False, index=True)       # 关联故障代码
+    logic_type = Column(String(10), default="or")                     # and/or (多故障触发失效报告时的逻辑)
+
+    __table_args__ = (
+        Index("idx_ffr_failure", "failure_code"),
+    )
+
+
+class FDE(Base):
+    """FDE (Flight Deck Effect) 驾驶舱效应消息表"""
+    __tablename__ = "fde_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    fde_code = Column(String(50), nullable=False, index=True)         # FDE代码
+    fde_text = Column(Text)                                            # FDE描述
+    severity = Column(String(20), default="minor")
+    ata_chapter = Column(String(10), index=True)
+    lru_code = Column(String(50), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class LRUFailureReport(Base):
+    """LRU 失效报告表 - 故障整合到单个LRU后的失效报告"""
+    __tablename__ = "lru_failure_reports"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    lru_code = Column(String(50), nullable=False, index=True)         # LRU标识
+    lru_name = Column(String(100))                                     # LRU名称
+    failure_count = Column(Integer, default=0)                         # 关联失效报告数
+    fault_count = Column(Integer, default=0)                           # 关联故障报告数
+    failure_codes = Column(JSON, default=list)                        # 失效报告代码列表
+    root_fault_codes = Column(JSON, default=list)                     # 根源故障代码列表
+    flight_segment = Column(Integer, default=0, index=True)           # 航段
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class ConfigReport(Base):
