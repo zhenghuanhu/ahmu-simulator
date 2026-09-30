@@ -50,6 +50,18 @@ SIMULATION_CONFIG = {
     "max_terminals": 5,              # 最大终端接入数
 }
 
+# 故障诊断功能配置 (4.3.6 故障诊断)
+FAULT_DIAGNOSIS_CONFIG = {
+    # 是否启用成员系统周期自动上报故障。
+    # True  = 成员系统按 report_frequencies 周期自发上报故障 (持续产生故障报告)
+    # False = 关闭自动上报, 故障仅通过 ICD 故障注入(接口/界面"注入故障")手动产生 (默认, 可控)
+    "auto_report_enabled": False,
+    # 每个成员系统每次上报周期实际产生故障的概率 (0~1), 仅 auto_report_enabled=True 时生效
+    "auto_report_probability": 0.005,
+    # 成员系统故障上报频率 (Hz)
+    "report_frequencies": [0.25, 0.5, 1.0, 2.0],
+}
+
 # 发动机配平功能配置 (4.3.9 发动机配平)
 ENGINE_TRIM_CONFIG = {
     "engine_count": 4,                              # 发动机数量 (四发飞机)

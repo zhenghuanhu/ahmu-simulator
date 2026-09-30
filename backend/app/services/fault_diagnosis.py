@@ -21,6 +21,7 @@ from app.database import (
 )
 from app.core.websocket_manager import ws_manager
 from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
+from app.config import FAULT_DIAGNOSIS_CONFIG
 
 # 成员系统总数 (真实48 + 虚拟补足, 满足"不少于400个成员系统")
 FAULT_MEMBER_COUNT = 400
@@ -29,8 +30,8 @@ FAULTS_PER_MEMBER = 6
 # FDE 消息总数 (不少于100条)
 FDE_COUNT = 100
 
-# 故障上报频率 (Hz)
-REPORT_FREQUENCIES = [0.25, 0.5, 1.0, 2.0]
+# 故障上报频率 (Hz) (默认值, 实际以 config.FAULT_DIAGNOSIS_CONFIG 为准)
+REPORT_FREQUENCIES = FAULT_DIAGNOSIS_CONFIG.get("report_frequencies", [0.25, 0.5, 1.0, 2.0])
 
 # FDE 驾驶舱效应描述模板
 FDE_TEXTS = [
@@ -61,6 +62,9 @@ class FaultDiagnosisService:
         self._current_segment = 0
         self._total_faults = 0
         self._inj_seq = 0
+        # 自动上报控制 (来自 config.FAULT_DIAGNOSIS_CONFIG)
+        self._auto_report_enabled = FAULT_DIAGNOSIS_CONFIG.get("auto_report_enabled", False)
+        self._auto_report_probability = FAULT_DIAGNOSIS_CONFIG.get("auto_report_probability", 0.005)
 
     # ==================== 生命周期 ====================
 
@@ -70,7 +74,8 @@ class FaultDiagnosisService:
         self._build_fde_pool()
         self._build_fault_model()
         logger.info(f"故障诊断服务已启动 (成员系统{len(self._member_catalog)}, "
-                    f"故障模型{len(self._fault_model)}, FDE{len(self._fde_pool)})")
+                    f"故障模型{len(self._fault_model)}, FDE{len(self._fde_pool)}, "
+                    f"自动上报={'启用' if self._auto_report_enabled else '关闭'})")
         asyncio.create_task(self._receive_loop())
 
     async def stop(self):
@@ -240,8 +245,11 @@ class FaultDiagnosisService:
             await asyncio.sleep(TICK)
 
     async def _report_fault(self, member: str):
-        """成员系统自发上报故障 (低概率, 演示周期上报)"""
-        if random.random() > 0.005:  # 0.5% 概率, 避免故障爆炸
+        """成员系统自发上报故障 (仅当 auto_report_enabled=True 时, 按概率产生)"""
+        # 自动上报开关: 关闭时直接返回, 故障仅通过 ICD 注入手动产生
+        if not self._auto_report_enabled:
+            return
+        if random.random() > self._auto_report_probability:
             return
         faults = [m for m in self._fault_model.values()
                   if m["member_system"] == member]
@@ -432,6 +440,50 @@ class FaultDiagnosisService:
             return {"status": "error", "message": f"成员系统 {member} 不存在"}
         self._failure_enabled[member] = enabled
         return {"status": "ok", "member_system": member, "failure_enabled": enabled}
+
+    # ==================== 自动上报配置 (界面配置页读写) ====================
+
+    def get_auto_report_config(self) -> dict:
+        """获取故障自动上报配置 (供界面配置页展示)"""
+        return {
+            "auto_report_enabled": self._auto_report_enabled,
+            "auto_report_probability": self._auto_report_probability,
+            "report_frequencies": list(REPORT_FREQUENCIES),
+        }
+
+    def update_auto_report_config(self, enabled: bool,
+                                  probability: Optional[float] = None) -> dict:
+        """更新故障自动上报配置 (运行时立即生效, 无需重启)"""
+        if probability is not None:
+            if not (0 <= probability <= 1):
+                return {"status": "error", "message": "自动上报概率需在 0~1 之间"}
+            self._auto_report_probability = float(probability)
+        self._auto_report_enabled = bool(enabled)
+        logger.info(f"故障自动上报配置更新: enabled={self._auto_report_enabled}, "
+                    f"probability={self._auto_report_probability}")
+        return {"status": "ok", "auto_report_enabled": self._auto_report_enabled,
+                "auto_report_probability": self._auto_report_probability}
+
+    def clear_history_reports(self) -> dict:
+        """清理全部历史故障报告与失效报告 (界面配置页「清理历史报告」入口)"""
+        db = SessionLocal()
+        try:
+            cleared_faults = db.query(FaultReport).delete()
+            cleared_failures = db.query(FailureReport).delete()
+            db.commit()
+            # 同步清理内存中的活跃故障集合与计数
+            self._active_faults.clear()
+            self._total_faults = 0
+            logger.info(f"历史报告已清理: 故障报告 {cleared_faults} 条, 失效报告 {cleared_failures} 条")
+            return {"status": "ok",
+                    "fault_reports_cleared": cleared_faults,
+                    "failure_reports_cleared": cleared_failures}
+        except Exception as e:
+            db.rollback()
+            logger.error(f"清理历史报告失败: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            db.close()
 
     # ==================== 查询接口 ====================
 

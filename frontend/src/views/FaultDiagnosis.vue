@@ -449,6 +449,7 @@ onMounted(() => {
   fetchFde()
   fetchLru()
   fetchModel()
+  fetchHistory()   // 加载默认航段(0)的历史失效报告
   on('fault_new', onFaultChanged)
   on('fault_resolved', onFaultChanged)
 })

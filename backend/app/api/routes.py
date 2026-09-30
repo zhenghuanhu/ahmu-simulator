@@ -93,6 +93,30 @@ async def force_system_mode(mode: str = "maintenance"):
     return result
 
 
+class FaultDiagConfigRequest(BaseModel):
+    auto_report_enabled: bool = False            # 是否启用故障自动上报
+    auto_report_probability: Optional[float] = None  # 自动上报概率 (0~1)
+
+
+@router.get("/system/fault-diagnosis-config")
+async def get_fault_diagnosis_config():
+    """获取故障诊断自动上报配置 (界面配置页读取)"""
+    return fault_service.get_auto_report_config()
+
+
+@router.post("/system/fault-diagnosis-config")
+async def update_fault_diagnosis_config(req: FaultDiagConfigRequest):
+    """更新故障诊断自动上报配置 (运行时立即生效)"""
+    return fault_service.update_auto_report_config(
+        req.auto_report_enabled, req.auto_report_probability)
+
+
+@router.post("/system/fault-history-clear")
+async def clear_fault_history():
+    """清理全部历史故障报告与失效报告 (界面配置页入口)"""
+    return fault_service.clear_history_reports()
+
+
 @router.get("/system/signals")
 async def get_signals():
     """获取当前模拟ARINC664离散量信号状态 (含模式判定条件明细与30s计时进度)"""

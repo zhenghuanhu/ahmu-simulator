@@ -189,7 +189,7 @@ const pageTitle = computed(() => {
 const mainTabs = [
   { path: '/dashboard', label: 'CENTRAL MAINTENANCE', title: '系统总览' },
   { path: '/params', label: 'PARAMETER MONITORING', title: '参数监控' },
-  { path: '/settings', label: 'INTERFACE SETTINGS', title: '界面配置' },
+  { path: '/settings', label: 'SETTINGS', title: '配置' },
   { path: '/login', label: 'LOGOUT', title: '退出' },
 ]
 

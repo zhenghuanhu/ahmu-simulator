@@ -27,7 +27,7 @@ const routes = [
       { path: 'acars', name: 'ACARS', component: () => import('../views/ACARS.vue'), meta: { title: 'ACARS' } },
       { path: 'print', name: 'Print', component: () => import('../views/Print.vue'), meta: { title: 'Print' } },
       { path: 'icd', name: 'ICD', component: () => import('../views/ICDManagement.vue'), meta: { title: 'ICD' } },
-      { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '界面配置' } },
+      { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '配置' } },
     ],
   },
 ]
