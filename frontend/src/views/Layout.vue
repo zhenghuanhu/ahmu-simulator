@@ -206,6 +206,7 @@ const subTabs = [
   { path: '/enginetrim', label: 'ENGINE TRIM', title: '发动机配平' },
   { path: '/events', label: 'EVENT REPORTS', title: '事件报告' },
   { path: '/print', label: 'PRINT', title: '打印管理' },
+  { path: '/commsecurity', label: 'COMM SECURITY', title: '通信安全防护' },
   { path: '/config', label: 'CONFIGURATION MANAGEMENT', title: '构型管理' },
 ]
 

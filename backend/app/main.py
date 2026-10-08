@@ -70,6 +70,7 @@ async def lifespan(app: FastAPI):
     from app.services.nvm_reset import nvm_reset_service
     from app.services.nvm_download import nvm_download_service
     from app.services.aircraft_status import aircraft_status_service
+    from app.services.comm_security import comm_security_service
 
     await fault_service.start()
     await param_service.start()
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
     await nvm_reset_service.start()
     await nvm_download_service.start()
     await aircraft_status_service.start()
+    await comm_security_service.start()
 
     logger.info("=" * 60)
     logger.info("AHMU 仿真器启动完成!")
@@ -110,6 +112,7 @@ async def lifespan(app: FastAPI):
     await nvm_reset_service.stop()
     await nvm_download_service.stop()
     await aircraft_status_service.stop()
+    await comm_security_service.stop()
 
     await hardware.shutdown()
     shm_channel.close()

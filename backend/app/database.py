@@ -641,3 +641,25 @@ class LifecycleRetrievalLog(Base):
     __table_args__ = (
         Index("idx_lifecycle_log_equip_time", "equip_id", "operated_at"),
     )
+
+
+class WiFiWhitelist(Base):
+    """WiFi 白名单表 (4.3.5 OHMS通信安全防护) - 可信 WiFi SSID + 预共享密钥"""
+    __tablename__ = "wifi_whitelist"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ssid = Column(String(100), nullable=False, unique=True, index=True)  # 可信 WiFi SSID
+    psk = Column(String(100), nullable=False)                            # 预共享密钥 (WPA2-PSK)
+    description = Column(String(200))                                     # 描述
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class CommSecurityLog(Base):
+    """通信安全日志表 (4.3.5 OHMS通信安全防护) - CRC校验/异常包/VPN/扫描/认证事件"""
+    __tablename__ = "comm_security_logs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type = Column(String(30), nullable=False, index=True)  # crc_check/packet_drop/vpn_establish/vpn_teardown/wifi_scan/psk_auth
+    detail = Column(Text)                                         # 事件详情
+    result = Column(String(20), default="success", index=True)    # success/failed/dropped
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

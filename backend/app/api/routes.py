@@ -24,6 +24,7 @@ from app.services.engine_trim import engine_trim_service
 from app.services.nvm_reset import nvm_reset_service
 from app.services.nvm_download import nvm_download_service
 from app.services.aircraft_status import aircraft_status_service
+from app.services.comm_security import comm_security_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -790,3 +791,89 @@ async def set_aircraft_status_signal(payload: dict):
 async def set_aircraft_identity(payload: dict):
     """设置飞机身份信息 (由飞管系统/ATC提供: ICAO码/注册号/航班号/机场)"""
     return aircraft_status_service.set_aircraft_identity(payload)
+
+
+# ==================== OHMS 通信安全防护 (4.3.5) ====================
+
+@router.post("/comm-security/append-crc")
+async def append_crc(payload: dict):
+    """发送方: 数据包/文件末尾追加 CRC 校验值"""
+    return comm_security_service.append_crc(payload.get("payload", ""))
+
+
+@router.post("/comm-security/receive-packet")
+async def receive_packet(payload: dict):
+    """接收方: 校验数据包 CRC, 错误则丢弃"""
+    return comm_security_service.receive_packet(
+        payload.get("payload", ""), payload.get("crc"))
+
+
+@router.post("/comm-security/verify-file")
+async def verify_file(payload: dict):
+    """文件完整性校验 (文件末尾 CRC)"""
+    return comm_security_service.verify_file(payload.get("content", ""), payload.get("crc"))
+
+
+@router.post("/comm-security/vpn/establish")
+async def establish_vpn():
+    """建立 VPN 加密隧道"""
+    return comm_security_service.establish_vpn_tunnel()
+
+
+@router.post("/comm-security/vpn/teardown")
+async def teardown_vpn():
+    """断开 VPN 隧道"""
+    return comm_security_service.teardown_vpn_tunnel()
+
+
+@router.get("/comm-security/vpn/status")
+async def vpn_status():
+    """查询 VPN 隧道状态"""
+    return comm_security_service.vpn_status
+
+
+@router.get("/comm-security/whitelist")
+async def get_whitelist():
+    """获取 WiFi 白名单"""
+    return comm_security_service.get_whitelist()
+
+
+@router.post("/comm-security/whitelist")
+async def add_whitelist(payload: dict):
+    """添加可信 WiFi 到白名单 (SSID + PSK)"""
+    return comm_security_service.add_whitelist(
+        payload.get("ssid", ""), payload.get("psk", ""), payload.get("description", ""))
+
+
+@router.delete("/comm-security/whitelist/{ssid}")
+async def remove_whitelist(ssid: str):
+    """从白名单移除 WiFi"""
+    return comm_security_service.remove_whitelist(ssid)
+
+
+@router.post("/comm-security/wifi/scan")
+async def scan_wifi():
+    """WiFi 扫描: 扫描附近网络并与白名单比对"""
+    return comm_security_service.scan_wifi()
+
+
+@router.post("/comm-security/wifi/authenticate")
+async def authenticate_wifi(payload: dict):
+    """PSK 身份验证: 与白名单比对预共享密钥, 认证成功建立连接"""
+    return comm_security_service.authenticate(payload.get("ssid", ""), payload.get("psk", ""))
+
+
+@router.get("/comm-security/logs")
+async def get_comm_security_logs(
+    event_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+):
+    """查询通信安全日志"""
+    return comm_security_service.get_logs(event_type, page, size)
+
+
+@router.get("/comm-security/stats")
+async def get_comm_security_stats():
+    """查询通信安全统计"""
+    return comm_security_service.get_stats()

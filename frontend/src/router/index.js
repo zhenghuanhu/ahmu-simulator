@@ -26,6 +26,7 @@ const routes = [
       { path: 'lifecycle', name: 'Lifecycle', component: () => import('../views/Lifecycle.vue'), meta: { title: 'Time Cycle' } },
       { path: 'acars', name: 'ACARS', component: () => import('../views/ACARS.vue'), meta: { title: 'ACARS' } },
       { path: 'print', name: 'Print', component: () => import('../views/Print.vue'), meta: { title: 'Print' } },
+      { path: 'commsecurity', name: 'CommSecurity', component: () => import('../views/CommSecurity.vue'), meta: { title: 'Comm Security' } },
       { path: 'icd', name: 'ICD', component: () => import('../views/ICDManagement.vue'), meta: { title: 'ICD' } },
       { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '配置' } },
     ],
