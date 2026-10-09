@@ -23,6 +23,9 @@ backend/*.db
 # 运行时数据 (数据库/打印输出 ps 文件)
 backend/data/
 
+# 运行时缓存 (ICD快照/演示ICD/上传临时文件)
+backend/cache/
+
 # 前端构建产物
 frontend/dist/
 

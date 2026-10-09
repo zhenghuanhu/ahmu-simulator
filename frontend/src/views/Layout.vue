@@ -208,6 +208,7 @@ const subTabs = [
   { path: '/print', label: 'PRINT', title: '打印管理' },
   { path: '/commsecurity', label: 'COMM SECURITY', title: '通信安全防护' },
   { path: '/config', label: 'CONFIGURATION MANAGEMENT', title: '构型管理' },
+  { path: '/icd', label: 'ICD MANAGEMENT', title: 'ICD管理' },
 ]
 
 const switchOptions = [

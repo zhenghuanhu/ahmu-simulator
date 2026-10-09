@@ -1,15 +1,15 @@
 """
 API路由层 - REST API + WebSocket端点
 """
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, Path
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, Path, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 import json
 
-from app.database import get_db
+from app.database import get_db, ICDEntry
 from app.core.websocket_manager import ws_manager
 from app.services.fault_diagnosis import fault_service
 from app.services.param_monitor import param_service
@@ -515,27 +515,124 @@ async def save_lifecycle_data(req: LifecycleSaveRequest):
 
 # ==================== ICD管理 ====================
 
+def _persist_icd_entries(db: Session) -> int:
+    """将解析结果入库 ICDEntry 表 (重建: 先清空旧数据再写入)"""
+    from app.database import ICDEntry
+    db.query(ICDEntry).delete()
+    db.commit()
+    entries = icd_parser.get_signal_entries()
+    for e in entries:
+        db.add(ICDEntry(**e))
+    db.commit()
+    return len(entries)
+
+
+@router.post("/icd/upload")
+async def upload_icd(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    导入标准格式ICD文件 (文件上传)
+    流程: 格式识别校验 -> 解析入库 -> 冲突检测 -> 导入日志
+    """
+    from app.config import CACHE_DIR
+    if not file.filename or not file.filename.lower().endswith(".json"):
+        return {"status": "error", "message": "仅支持 JSON 格式 ICD 文件"}
+    content = await file.read()
+    save_path = CACHE_DIR / f"uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    save_path.write_bytes(content)
+
+    result = icd_parser.parse_icd_file(str(save_path))
+    if result.get("errors") and not result.get("total_messages"):
+        return {"status": "error", "message": "ICD解析失败", "result": result}
+
+    saved = _persist_icd_entries(db)
+    icd_parser._log("解析入库", f"已写入数据库 icd_entries 表 {saved} 条信号记录", "info")
+    result["db_saved"] = saved
+    result["import_log"] = icd_parser.import_log
+    return {"status": "ok", "result": result}
+
+
 @router.post("/icd/import")
-async def import_icd(file_path: str):
-    """导入ICD文件"""
+async def import_icd(file_path: str, db: Session = Depends(get_db)):
+    """导入ICD文件 (按路径)"""
     result = icd_parser.parse_icd_file(file_path)
+    if result.get("errors") and not result.get("total_messages"):
+        return {"status": "error", "message": "ICD解析失败", "result": result}
+    saved = _persist_icd_entries(db)
+    icd_parser._log("解析入库", f"已写入数据库 icd_entries 表 {saved} 条信号记录", "info")
+    result["db_saved"] = saved
+    result["import_log"] = icd_parser.import_log
     return {"status": "ok", "result": result}
 
 
 @router.post("/icd/generate-demo")
-async def generate_demo_icd(output_path: str = "", member_count: int = 20):
-    """生成演示ICD文件"""
+async def generate_demo_icd(output_path: str = "", member_count: int = 20, db: Session = Depends(get_db)):
+    """生成演示ICD文件并导入"""
     if not output_path:
         from app.config import CACHE_DIR
         output_path = str(CACHE_DIR / "demo_icd.json")
     icd_parser.generate_demo_icd(output_path, member_count)
-    return {"status": "ok", "file_path": output_path}
+    result = icd_parser.parse_icd_file(output_path)
+    saved = _persist_icd_entries(db)
+    icd_parser._log("解析入库", f"已写入数据库 icd_entries 表 {saved} 条信号记录", "info")
+    result["db_saved"] = saved
+    result["import_log"] = icd_parser.import_log
+    return {"status": "ok", "file_path": output_path, "result": result}
 
 
 @router.get("/icd/members")
 async def get_icd_members():
     """获取ICD成员系统列表"""
     return {"members": icd_parser.get_all_members(), "is_loaded": icd_parser.is_loaded}
+
+
+@router.get("/icd/frames")
+async def get_icd_frames(member: Optional[str] = None):
+    """获取消息帧列表 (功能模型摘要)"""
+    frames = icd_parser.get_all_frames(member)
+    return {"total": len(frames), "frames": frames}
+
+
+@router.get("/icd/frame/{member}/{frame_name}")
+async def get_icd_frame_detail(member: str, frame_name: str):
+    """获取消息帧详情 + 信号字典 (完整元数据)"""
+    detail = icd_parser.get_frame_detail(member, frame_name)
+    if not detail:
+        return {"status": "error", "message": f"未找到消息帧: {member}/{frame_name}"}
+    return {"status": "ok", "frame": detail}
+
+
+@router.get("/icd/model")
+async def get_icd_model():
+    """获取AHMU功能模型概览: 成员系统 -> 消息帧数 -> 信号数"""
+    model = []
+    for member in icd_parser.get_all_members():
+        m = icd_parser.get_member_model(member)
+        if not m:
+            continue
+        frame_count = len(m.frames)
+        signal_count = sum(len(f.signals) for f in m.frames.values())
+        model.append({
+            "member_system": member,
+            "frame_count": frame_count,
+            "signal_count": signal_count,
+            "frames": list(m.frames.keys()),
+        })
+    return {"total_members": len(model), "model": model}
+
+
+@router.get("/icd/log")
+async def get_icd_import_log():
+    """获取最近一次ICD导入日志"""
+    return {"import_log": icd_parser.import_log}
+
+
+@router.post("/icd/parse-demo")
+async def icd_parse_demo(req: dict):
+    """parse_any 解析演示: hex -> 信号字典"""
+    member = req.get("member_system", "")
+    frame_name = req.get("frame_name", "")
+    raw_hex = req.get("raw_hex", "")
+    return icd_parser.parse_demo(member, frame_name, raw_hex)
 
 
 # ==================== ACARS ====================

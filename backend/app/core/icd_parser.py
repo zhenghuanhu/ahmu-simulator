@@ -118,7 +118,74 @@ class ICDParser:
     def __init__(self):
         self.member_models: dict[str, MemberModel] = {}
         self.icd_entries: list[dict] = []
+        self.import_log: list[dict] = []  # 导入日志 [{step, message, level, timestamp}]
         self._is_loaded = False
+
+    def _log(self, step: str, message: str, level: str = "info"):
+        """记录导入日志"""
+        from datetime import datetime
+        self.import_log.append({
+            "step": step,
+            "message": message,
+            "level": level,  # info/warning/error
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+        })
+
+    def _validate_message(self, msg: dict, idx: int) -> list[str]:
+        """
+        校验单条消息定义, 返回错误列表
+        覆盖: 必填字段、协议识别、信号字段合法性
+        """
+        errors = []
+        # 必填字段
+        msg_id = msg.get("message_id", "")
+        member = msg.get("member_system", "")
+        frame_name = msg.get("frame_name", "")
+        protocol = (msg.get("protocol") or "").upper()
+
+        if not msg_id:
+            errors.append(f"第{idx+1}条消息缺少 message_id")
+        elif msg_id.count("-") != 2:
+            errors.append(f"消息ID格式错误(应为 成员系统-数据库-消息帧): {msg_id}")
+        if not member:
+            errors.append(f"消息 {msg_id or idx+1} 缺少 member_system")
+        if not frame_name:
+            errors.append(f"消息 {msg_id or idx+1} 缺少 frame_name")
+
+        # 协议识别
+        VALID_PROTOCOLS = {"A664", "A429", "A825"}
+        if not protocol:
+            errors.append(f"消息 {msg_id or idx+1} 缺少 protocol")
+        elif protocol not in VALID_PROTOCOLS:
+            errors.append(f"消息 {msg_id or idx+1} 协议无法识别: {protocol} (支持 {sorted(VALID_PROTOCOLS)})")
+
+        # 协议相关标识
+        if protocol == "A664" and not msg.get("vl_id"):
+            errors.append(f"消息 {msg_id} 为A664协议但缺少 vl_id")
+        if protocol == "A429" and msg.get("label_id") is None:
+            errors.append(f"消息 {msg_id} 为A429协议但缺少 label_id")
+        if protocol == "A825" and msg.get("can_id") is None:
+            errors.append(f"消息 {msg_id} 为A825协议但缺少 can_id")
+
+        # 信号校验
+        signals = msg.get("signals", [])
+        if not signals:
+            errors.append(f"消息 {msg_id} 未定义任何信号")
+        seen_sig = set()
+        for s in signals:
+            if not s.get("name"):
+                errors.append(f"消息 {msg_id} 存在无名信号")
+                continue
+            if s["name"] in seen_sig:
+                errors.append(f"消息 {msg_id} 存在重复信号名: {s['name']}")
+            seen_sig.add(s.get("name"))
+            bl = s.get("bit_length", 1)
+            if not isinstance(bl, int) or bl <= 0 or bl > 64:
+                errors.append(f"消息 {msg_id} 信号 {s['name']} 位长度非法: {bl}")
+            bo = s.get("bit_offset", 0)
+            if not isinstance(bo, int) or bo < 0:
+                errors.append(f"消息 {msg_id} 信号 {s['name']} 位偏移非法: {bo}")
+        return errors
 
     def parse_icd_file(self, file_path: str) -> dict:
         """
@@ -143,54 +210,90 @@ class ICDParser:
         }
         """
         logger.info(f"开始解析ICD文件: {file_path}")
+
+        # 重建模式: 清空旧数据, ICD变更后重新导入自动重建数据库与所有MemberModel对象
+        self.member_models = {}
+        self.icd_entries = []
+        self.import_log = []
+        self._is_loaded = False
+
         result = {
             "total_messages": 0,
             "total_signals": 0,
             "total_members": 0,
             "conflicts": [],
             "errors": [],
+            "import_log": self.import_log,
         }
+
+        # 1. 格式识别
+        if not os.path.exists(file_path):
+            result["errors"].append(f"文件不存在: {file_path}")
+            self._log("格式识别", f"文件不存在: {file_path}", "error")
+            return result
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext != ".json":
+            self._log("格式识别", f"文件扩展名 {ext} 非标准 JSON 格式", "warning")
+        self._log("格式识别", f"识别为 {ext or '未知'} 格式 ICD 文件: {os.path.basename(file_path)}", "info")
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 icd_data = json.load(f)
-        except FileNotFoundError:
-            result["errors"].append(f"文件不存在: {file_path}")
-            return result
         except json.JSONDecodeError as e:
             result["errors"].append(f"JSON解析失败: {e}")
+            self._log("格式识别", f"JSON解析失败: {e}", "error")
             return result
 
+        # 2. 结构校验
+        if not isinstance(icd_data, dict) or "messages" not in icd_data:
+            result["errors"].append("ICD文件结构错误: 缺少顶层 messages 字段")
+            self._log("文件校验", "文件结构错误: 缺少顶层 messages 字段", "error")
+            return result
         messages = icd_data.get("messages", [])
+        self._log("文件校验", f"文件结构校验通过, 共 {len(messages)} 条消息定义", "info")
+
         seen_ids = set()
         seen_labels = set()
         seen_can_ids = set()
         seen_vl_ids = set()
 
-        for msg in messages:
+        for idx, msg in enumerate(messages):
             msg_id = msg.get("message_id", "")
             member = msg.get("member_system", "")
-            protocol = msg.get("protocol", "A664")
+            protocol = (msg.get("protocol") or "A664").upper()
 
-            # 冲突检测
+            # 逐条字段校验
+            msg_errors = self._validate_message(msg, idx)
+            if msg_errors:
+                for e in msg_errors:
+                    result["errors"].append(e)
+                    self._log("文件校验", e, "warning")
+                continue
+
+            # 冲突检测 (重复 Label/CAN ID/VL ID)
             if msg_id in seen_ids:
                 result["conflicts"].append(f"重复消息ID: {msg_id}")
+                self._log("冲突检测", f"重复消息ID: {msg_id}", "warning")
                 continue
             seen_ids.add(msg_id)
 
-            if protocol == "A429" and msg.get("label_id"):
-                if (msg.get("label_id"), msg.get("sdi", 0)) in seen_labels:
+            if protocol == "A429" and msg.get("label_id") is not None:
+                key = (msg.get("label_id"), msg.get("sdi", 0))
+                if key in seen_labels:
                     result["conflicts"].append(f"重复A429 Label: {msg.get('label_id')}")
-                seen_labels.add((msg.get("label_id"), msg.get("sdi", 0)))
+                    self._log("冲突检测", f"重复A429 Label: {msg.get('label_id')}", "warning")
+                seen_labels.add(key)
 
-            if protocol == "A825" and msg.get("can_id"):
+            if protocol == "A825" and msg.get("can_id") is not None:
                 if msg.get("can_id") in seen_can_ids:
                     result["conflicts"].append(f"重复CAN ID: 0x{msg.get('can_id'):X}")
+                    self._log("冲突检测", f"重复CAN ID: 0x{msg.get('can_id'):X}", "warning")
                 seen_can_ids.add(msg.get("can_id"))
 
-            if protocol == "A664" and msg.get("vl_id"):
+            if protocol == "A664" and msg.get("vl_id") is not None:
                 if msg.get("vl_id") in seen_vl_ids:
                     result["conflicts"].append(f"重复VL ID: {msg.get('vl_id')}")
+                    self._log("冲突检测", f"重复VL ID: {msg.get('vl_id')}", "warning")
                 seen_vl_ids.add(msg.get("vl_id"))
 
             # 创建消息帧
@@ -206,7 +309,7 @@ class ICDParser:
                 vl_id=msg.get("vl_id"),
             )
 
-            # 解析信号
+            # 解析信号 -> 信号字典
             for sig in msg.get("signals", []):
                 signal = SignalDef(
                     name=sig["name"],
@@ -222,7 +325,7 @@ class ICDParser:
                 frame.signals[signal.name] = signal
                 result["total_signals"] += 1
 
-            # 添加到MemberModel
+            # 添加到MemberModel (消息解析器集合)
             if member not in self.member_models:
                 self.member_models[member] = MemberModel(member)
                 result["total_members"] += 1
@@ -244,9 +347,13 @@ class ICDParser:
             result["total_messages"] += 1
 
         self._is_loaded = True
+        self._log("解析入库", f"成功解析 {result['total_messages']} 条消息帧 / "
+                             f"{result['total_signals']} 个信号 / {result['total_members']} 个成员系统", "info")
+        if result["conflicts"]:
+            self._log("冲突检测", f"共发现 {len(result['conflicts'])} 处冲突定义", "warning")
         logger.info(f"ICD解析完成: {result['total_messages']}条消息, "
                      f"{result['total_signals']}个信号, {result['total_members']}个成员系统, "
-                     f"{len(result['conflicts'])}个冲突")
+                     f"{len(result['conflicts'])}个冲突, {len(result['errors'])}个错误")
 
         # 生成二进制缓存
         self._save_cache()
@@ -353,6 +460,120 @@ class ICDParser:
     def get_all_members(self) -> list[str]:
         """获取所有成员系统列表"""
         return list(self.member_models.keys())
+
+    def get_all_frames(self, member: Optional[str] = None) -> list[dict]:
+        """
+        获取消息帧列表 (摘要)
+        供前端展示功能模型: 消息帧标识 + 协议 + 信号数
+        """
+        frames = []
+        members = [member] if member else self.member_models.keys()
+        for m in members:
+            model = self.member_models.get(m)
+            if not model:
+                continue
+            for fname, frame in model.frames.items():
+                frames.append({
+                    "message_id": frame.message_id,
+                    "member_system": frame.member_system,
+                    "database_name": frame.database_name,
+                    "frame_name": frame.frame_name,
+                    "protocol": frame.protocol,
+                    "port_id": frame.port_id,
+                    "label_id": frame.label_id,
+                    "can_id": frame.can_id,
+                    "vl_id": frame.vl_id,
+                    "signal_count": len(frame.signals),
+                })
+        return frames
+
+    def get_frame_detail(self, member_system: str, frame_name: str) -> Optional[dict]:
+        """
+        获取指定消息帧详情: 消息帧标识 + 完整信号字典
+        信号字典: 信号名称、位段、分辨率、偏移量、单位等完整元数据
+        """
+        model = self.member_models.get(member_system)
+        if not model:
+            return None
+        frame = model.frames.get(frame_name)
+        if not frame:
+            return None
+        signals = []
+        for sname, sig in frame.signals.items():
+            signals.append({
+                "name": sig.name,
+                "bit_offset": sig.bit_offset,
+                "bit_length": sig.bit_length,
+                "resolution": sig.resolution,
+                "offset": sig.offset,
+                "unit": sig.unit,
+                "min_val": sig.min_val,
+                "max_val": sig.max_val,
+                "data_type": sig.data_type,
+            })
+        return {
+            "message_id": frame.message_id,
+            "member_system": frame.member_system,
+            "database_name": frame.database_name,
+            "frame_name": frame.frame_name,
+            "protocol": frame.protocol,
+            "port_id": frame.port_id,
+            "label_id": frame.label_id,
+            "can_id": frame.can_id,
+            "vl_id": frame.vl_id,
+            "signals": signals,
+        }
+
+    def parse_demo(self, member_system: str, frame_name: str, raw_hex: str) -> dict:
+        """
+        parse_any 解析演示: 将 hex 原始数据解析为信号字典
+        ICD变更后 parse_any 自动适配新定义, 业务脚本无需修改
+        """
+        model = self.member_models.get(member_system)
+        if not model:
+            return {"error": f"成员系统不存在: {member_system}"}
+        try:
+            raw = bytes.fromhex(raw_hex.replace(" ", "").replace("0x", ""))
+        except ValueError:
+            return {"error": f"非法 hex 数据: {raw_hex}"}
+        frame = model.frames.get(frame_name)
+        if not frame:
+            return {"error": f"未知消息帧: {frame_name}"}
+        return {
+            "message_id": frame.message_id,
+            "frame_name": frame_name,
+            "parsed": frame.parse_any(raw),
+        }
+
+    def get_signal_entries(self) -> list[dict]:
+        """
+        获取信号级条目列表 (入库用)
+        每个信号一条记录, 供写入 ICDEntry 表
+        """
+        entries = []
+        for member, model in self.member_models.items():
+            for fname, frame in model.frames.items():
+                for sname, sig in frame.signals.items():
+                    entries.append({
+                        "message_id": frame.message_id,
+                        "member_system": frame.member_system,
+                        "database_name": frame.database_name,
+                        "frame_name": frame.frame_name,
+                        "protocol": frame.protocol,
+                        "port_id": frame.port_id,
+                        "label_id": frame.label_id,
+                        "can_id": frame.can_id,
+                        "vl_id": frame.vl_id,
+                        "signal_name": sig.name,
+                        "bit_offset": sig.bit_offset,
+                        "bit_length": sig.bit_length,
+                        "resolution": sig.resolution,
+                        "offset": sig.offset,
+                        "unit": sig.unit,
+                        "min_val": sig.min_val,
+                        "max_val": sig.max_val,
+                    })
+        return entries
 
     @property
     def is_loaded(self) -> bool:

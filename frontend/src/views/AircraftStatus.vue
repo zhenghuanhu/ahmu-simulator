@@ -125,10 +125,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="openInject(row.key, 'left')">左源注入</el-button>
-            <el-button size="small" @click="openInject(row.key, 'right')">右源注入</el-button>
+            <div style="display: flex; gap: 6px; white-space: nowrap;">
+              <el-button size="small" style="margin-left: 0;" @click="openInject(row.key, 'left')">左源注入</el-button>
+              <el-button size="small" style="margin-left: 0;" @click="openInject(row.key, 'right')">右源注入</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>

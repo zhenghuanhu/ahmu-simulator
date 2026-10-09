@@ -1,16 +1,5 @@
 <template>
   <div class="login-container">
-    <!-- 右上角飞机准星标志 -->
-    <div class="corner-marker">
-      <svg viewBox="0 0 60 60" width="48" height="48">
-        <line x1="30" y1="5" x2="30" y2="20" stroke="#ffffff" stroke-width="3" />
-        <line x1="30" y1="40" x2="30" y2="55" stroke="#ffffff" stroke-width="3" />
-        <line x1="5" y1="30" x2="20" y2="30" stroke="#ffffff" stroke-width="3" />
-        <line x1="40" y1="30" x2="55" y2="30" stroke="#ffffff" stroke-width="3" />
-        <circle cx="30" cy="30" r="4" fill="none" stroke="#ffffff" stroke-width="2" />
-      </svg>
-    </div>
-
     <div class="login-panel">
       <h1 class="login-title">Onboard Maintenance System</h1>
 
@@ -79,12 +68,6 @@ const handleLogin = async () => {
   align-items: center;
   justify-content: center;
   position: relative;
-}
-
-.corner-marker {
-  position: absolute;
-  top: 30px;
-  right: 40px;
 }
 
 .login-panel {
