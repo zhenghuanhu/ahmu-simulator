@@ -17,6 +17,7 @@ from app.services.config_management import config_service
 from app.services.startup_test import startup_test_service
 from app.services.data_load import data_load_service
 from app.services.maintenance_mode import maintenance_service
+from app.services.maintenance_rx import maintenance_rx
 from app.services.lifecycle import lifecycle_service
 from app.services.acars import acars_service
 from app.services.print_mgr import print_service
@@ -143,6 +144,28 @@ async def set_signals(payload: dict):
         "timestamp": datetime.utcnow().isoformat(),
     })
     return result
+
+
+# ==================== 维护模式控制 —— 接收侧 ====================
+
+@router.post("/maintenance/receive-aircraft-status")
+async def receive_aircraft_status(payload: dict):
+    """接收其他设备发送的飞机状态消息, 解析飞行阶段并驱动维护模式
+
+    对齐 ETest《维护模式控制.py》逻辑:
+    - flight_phase = 15 (maintenance) → 进入维护模式 (条件需持续30s生效)
+    - flight_phase = 1~14 → 恢复正常模式
+    - global_abort_flag: 维护阶段=False, 其它=True
+
+    消息示例: {"flight_phase": 15} 或 {"ds1_flight_phase": 2} 或 {"event_chase": "maintenance"}
+    """
+    return await maintenance_rx.receive_aircraft_status(payload)
+
+
+@router.get("/maintenance/rx-status")
+async def get_maintenance_rx_status():
+    """获取接收侧维护模式状态 (最近接收消息/飞行阶段/全局终止标志)"""
+    return maintenance_rx.get_rx_status()
 
 
 # ==================== 故障诊断 ====================

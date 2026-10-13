@@ -78,6 +78,9 @@ async def lifespan(app: FastAPI):
     await startup_test_service.start()
     await data_load_service.start()
     await maintenance_service.start()
+    # 启动维护模式 UDP 接收器 (监听 Aircraft_Status_Msg 端口 34896)
+    from app.services.maintenance_rx import maintenance_rx
+    maintenance_rx.start_udp_receiver()
     await lifecycle_service.start()
     await acars_service.start()
     await print_service.start()
@@ -105,6 +108,8 @@ async def lifespan(app: FastAPI):
     await startup_test_service.stop()
     await data_load_service.stop()
     await maintenance_service.stop()
+    from app.services.maintenance_rx import maintenance_rx
+    maintenance_rx.stop_udp_receiver()
     await lifecycle_service.stop()
     await acars_service.stop()
     await print_service.stop()
@@ -147,6 +152,7 @@ app.include_router(api_router)
 MAINTENANCE_ALLOWED_API_PREFIXES = (
     "/api/v1/system",        # 系统 (模式查询/切换/信号)
     "/api/v1/auth",          # 登录
+    "/api/v1/maintenance",   # 维护模式控制 (接收飞机状态消息, 需始终可用以支持退出维护模式)
     "/api/v1/groundtest",    # 启动测试
     "/api/v1/dataload",      # 数据加载
     "/api/v1/nvm-reset",     # 数据重置
