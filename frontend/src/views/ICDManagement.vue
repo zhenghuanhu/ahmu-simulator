@@ -13,7 +13,7 @@
         </span>
       </div>
       <div style="display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap;">
-        <input ref="fileInput" type="file" accept=".json" style="display: none;" @change="onFileChange" />
+        <input ref="fileInput" type="file" accept=".json,.xml" style="display: none;" @change="onFileChange" />
         <el-button type="primary" @click="pickFile" :loading="importing">
           导入ICD文件
         </el-button>
@@ -37,10 +37,34 @@
         已入库 <span class="ohms-cyan">{{ importResult.db_saved }}</span> 条信号记录
       </div>
       <div v-if="importResult.conflicts.length" style="margin-top: 12px;">
-        <div v-for="(c, i) in importResult.conflicts" :key="i" class="ohms-yellow" style="font-size: 12px;">⚠ {{ c }}</div>
+        <div v-for="(c, i) in importResult.conflicts.slice(0, 20)" :key="i" class="ohms-yellow" style="font-size: 12px;">⚠ {{ c }}</div>
+        <div v-if="importResult.conflicts.length > 20" class="ohms-dim" style="font-size: 12px;">… 共 {{ importResult.conflicts.length }} 条冲突</div>
       </div>
       <div v-if="importResult.errors.length" style="margin-top: 12px;">
-        <div v-for="(e, i) in importResult.errors" :key="i" class="ohms-red" style="font-size: 12px;">✗ {{ e }}</div>
+        <div v-for="(e, i) in importResult.errors.slice(0, 20)" :key="i" class="ohms-red" style="font-size: 12px;">✗ {{ e }}</div>
+        <div v-if="importResult.errors.length > 20" class="ohms-dim" style="font-size: 12px;">… 共 {{ importResult.errors.length }} 条错误</div>
+      </div>
+
+      <!-- XML 解析报告 (协议/数据类型/OHMS 分布 + 缺失字段) -->
+      <div v-if="importResult.report" style="margin-top: 12px; border-top: 1px dashed #222; padding-top: 12px;">
+        <div class="ohms-dim" style="font-size: 12px; margin-bottom: 8px;">
+          解析报告
+          <span class="ohms-green" v-if="importResult.report.total_datasets != null">· DS 数据集 {{ importResult.report.total_datasets }}</span>
+          <span class="ohms-yellow" v-if="importResult.report.duplicate_signals">· 重名信号 {{ importResult.report.duplicate_signals }} (已自动加后缀)</span>
+          <span class="ohms-yellow" v-if="importResult.report.vl_reuse_count">· VL 复用 {{ importResult.report.vl_reuse_count }}</span>
+        </div>
+        <div v-if="importResult.report.protocol_distribution" style="margin-bottom: 6px;">
+          <span class="ohms-dim" style="font-size: 12px;">协议: </span>
+          <el-tag v-for="(v, k) in importResult.report.protocol_distribution" :key="k" size="small" style="margin-right: 6px;">{{ k }} {{ v }}</el-tag>
+        </div>
+        <div v-if="importResult.report.ohms_distribution" style="margin-bottom: 6px;">
+          <span class="ohms-dim" style="font-size: 12px;">OHMS属性: </span>
+          <el-tag v-for="(v, k) in importResult.report.ohms_distribution" :key="k" size="small" type="warning" style="margin-right: 6px;">{{ k }} {{ v }}</el-tag>
+        </div>
+        <div v-if="importResult.report.missing_required && importResult.report.missing_required.length" style="margin-top: 6px;">
+          <div class="ohms-red" style="font-size: 12px;">⚠ 必填字段缺失 {{ importResult.report.missing_required.length }} 处:</div>
+          <div v-for="(m, i) in importResult.report.missing_required.slice(0, 10)" :key="i" class="ohms-yellow" style="font-size: 12px;">  · {{ m }}</div>
+        </div>
       </div>
     </el-card>
 
@@ -79,10 +103,10 @@
         </el-tag>
       </template>
       <el-table :data="frames" size="small" style="width: 100%;" @row-click="onFrameClick">
-        <el-table-column prop="message_id" label="消息帧标识" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="member_system" label="成员系统" width="120" />
-        <el-table-column prop="protocol" label="协议" width="80" />
-        <el-table-column label="协议标识" width="100">
+        <el-table-column prop="message_id" label="消息帧标识" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="member_system" label="成员系统" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="protocol" label="协议" width="70" />
+        <el-table-column label="协议标识" width="95">
           <template #default="{ row }">
             <span v-if="row.protocol === 'A429'">Label {{ row.label_id }}</span>
             <span v-else-if="row.protocol === 'A825'">CAN 0x{{ (row.can_id || 0).toString(16).toUpperCase() }}</span>
@@ -90,8 +114,8 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="signal_count" label="信号数" width="80" />
-        <el-table-column label="操作" width="90">
+        <el-table-column prop="signal_count" label="信号数" width="70" />
+        <el-table-column label="操作" width="88" fixed="right">
           <template #default="{ row }">
             <el-button size="small" text type="primary" @click.stop="onFrameClick(row)">信号字典</el-button>
           </template>
@@ -100,7 +124,7 @@
     </el-card>
 
     <!-- 信号字典详情弹窗 -->
-    <el-dialog v-model="dictVisible" :title="`信号字典 — ${dictFrame?.message_id || ''}`" width="760px">
+    <el-dialog v-model="dictVisible" :title="`信号字典 — ${dictFrame?.message_id || ''}`" width="900px" class="icd-dict-dialog">
       <div v-if="dictFrame" class="ohms-dim" style="font-size: 12px; margin-bottom: 12px;">
         协议 {{ dictFrame.protocol }} ·
         <span v-if="dictFrame.protocol === 'A429'">Label {{ dictFrame.label_id }}</span>
@@ -108,16 +132,17 @@
         <span v-else-if="dictFrame.protocol === 'A664'">VL {{ dictFrame.vl_id }} · Port {{ dictFrame.port_id }}</span>
       </div>
       <el-table :data="dictSignals" size="small" style="width: 100%;">
-        <el-table-column prop="name" label="信号名称" min-width="130" />
-        <el-table-column prop="bit_offset" label="位偏移" width="70" />
-        <el-table-column prop="bit_length" label="位长度" width="70" />
-        <el-table-column prop="resolution" label="分辨率" width="80" />
-        <el-table-column prop="offset" label="偏移量" width="80" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="data_type" label="类型" width="70" />
-        <el-table-column label="范围" width="110">
+        <el-table-column prop="name" label="信号名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="data_format_type" label="类型" width="75" />
+        <el-table-column prop="bit_offset" label="位偏移" width="65" />
+        <el-table-column prop="bit_length" label="位长度" width="65" />
+        <el-table-column prop="resolution" label="分辨率" width="75" />
+        <el-table-column prop="offset" label="偏移量" width="70" />
+        <el-table-column prop="unit" label="单位" width="60" />
+        <el-table-column prop="ohms_attribute" label="OHMS属性" width="100" show-overflow-tooltip />
+        <el-table-column label="范围" width="95">
           <template #default="{ row }">
-            {{ row.min_val ?? '—' }} ~ {{ row.max_val ?? '—' }}
+            {{ row.min_val ?? '—' }}~{{ row.max_val ?? '—' }}
           </template>
         </el-table-column>
       </el-table>
@@ -384,5 +409,23 @@ onMounted(() => {
 .log-msg {
   flex: 1;
   word-break: break-all;
+}
+
+/* 移动端响应式: 统计卡片数值适配窄屏 */
+@media (max-width: 768px) {
+  .stat-item .ohms-value {
+    font-size: 18px;
+  }
+  .member-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+</style>
+
+<style>
+/* 全局: 信号字典弹窗响应式宽度
+   el-dialog 默认 teleport 到 body, scoped 样式无法命中, 需全局样式 */
+.icd-dict-dialog {
+  max-width: 96vw;
 }
 </style>

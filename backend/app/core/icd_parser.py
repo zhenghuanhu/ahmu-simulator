@@ -15,16 +15,31 @@ from app.config import ICD_CACHE_FILE, CACHE_DIR
 
 @dataclass
 class SignalDef:
-    """信号定义"""
+    """信号定义
+
+    兼容两种 ICD 来源:
+    - JSON (自研简化格式): bit_offset 为消息内绝对位偏移
+    - XML (Member_System_all_sender_icd_v6_1_1): 完整保留航电 ICD 字段
+    """
     name: str
-    bit_offset: int
-    bit_length: int
-    resolution: float = 1.0
-    offset: float = 0.0
-    unit: str = ""
-    min_val: Optional[float] = None
-    max_val: Optional[float] = None
-    data_type: str = "int"  # int/uint/float/bool
+    bit_offset: int              # 消息内绝对位偏移 = ByteOffsetWithinMsg*8 + BitOffsetWithinDS
+    bit_length: int              # 位长度 (XML: ParameterSize)
+    resolution: float = 1.0      # 分辨率 (XML: LsbRes*Multiplier)
+    offset: float = 0.0          # 偏移量
+    unit: str = ""               # 单位 (XML: Units)
+    min_val: Optional[float] = None   # 最小值 (XML: FuncRngMin/FullScaleRngMin)
+    max_val: Optional[float] = None   # 最大值 (XML: FuncRngMax/FullScaleRngMax)
+    data_type: str = "int"       # 内部类型: int/uint/float/bool/dis/char/pad/opaque
+    # --- XML 原始字段 (可追溯) ---
+    data_format_type: str = ""   # XML 原始 DataFormatType (SINT/UBNR/BNR/BOOL/DIS/...)
+    byte_offset: int = 0         # 消息内字节偏移 (XML: DS.ByteOffsetWithinMsg)
+    ds_bit_offset: int = 0       # DS 内位偏移 (XML: DP.BitOffsetWithinDS)
+    lsb_res: Optional[float] = None     # LSB 分辨率 (XML: LsbRes)
+    multiplier: Optional[float] = None  # 倍率 (XML: Multiplier)
+    ohms_attribute: str = ""     # OHMS 属性 (Fault/Parameter/ConfigurationReport)
+    one_state: str = ""          # 1 状态描述 (XML: OneState)
+    zero_state: str = ""         # 0 状态描述 (XML: ZeroState)
+    label: Optional[str] = None  # RDCU Label (XML: Label)
 
 
 @dataclass
@@ -39,29 +54,61 @@ class MessageFrame:
     label_id: Optional[int] = None
     can_id: Optional[int] = None
     vl_id: Optional[int] = None
+    # --- XML 扩展字段 ---
+    message_size: int = 0                 # 消息字节大小 (XML: MessageSize)
+    transmission_interval: int = 0        # 发送周期 ms (XML: TransmissionIntervalMinimum)
+    msg_data_protocol_type: str = ""      # 消息数据协议类型 (XML: MsgDataProtocolType)
+    port_name: str = ""                   # 端口名 (XML: Port.Name)
+    ds_list: list = field(default_factory=list)  # DS 分组列表 (XML 可追溯)
     signals: dict[str, SignalDef] = field(default_factory=dict)
 
     def parse_any(self, raw_data: bytes) -> dict[str, Any]:
         """
         解析任意原始数据帧, 自动适配信号定义
         ICD变更时业务脚本无需修改
+        支持有符号补码(SINT/BNR)、无符号(UBNR/UINT)、布尔、离散量、字符类型
         """
         results = {}
         bits = int.from_bytes(raw_data, byteorder="big", signed=False)
 
         for sig_name, sig_def in self.signals.items():
+            # 填充/帧同步/保留位跳过
+            if sig_def.data_type in ("pad", "opaque", "fsb", "resv", "spar"):
+                continue
+
             # 提取信号位段
-            mask = ((1 << sig_def.bit_length) - 1)
-            raw_val = (bits >> sig_def.bit_offset) & mask
+            mask = ((1 << sig_def.bit_length) - 1) if sig_def.bit_length < 64 else None
+            if mask is None:
+                raw_val = (bits >> sig_def.bit_offset) if sig_def.bit_offset < 64 else 0
+            else:
+                raw_val = (bits >> sig_def.bit_offset) & mask
 
             # 类型转换 + 分辨率 + 偏移
-            if sig_def.data_type in ("int", "uint"):
+            if sig_def.data_type == "int":
+                # 有符号补码: 符号扩展
+                sign_bit = 1 << (sig_def.bit_length - 1)
+                if raw_val & sign_bit:
+                    raw_val -= (1 << sig_def.bit_length)
                 value = raw_val * sig_def.resolution + sig_def.offset
-            elif sig_def.data_type == "float":
-                # 浮点信号: 按位段提取后转float
-                value = float(raw_val) * sig_def.resolution + sig_def.offset
+            elif sig_def.data_type in ("uint", "float"):
+                value = raw_val * sig_def.resolution + sig_def.offset
             elif sig_def.data_type == "bool":
                 value = bool(raw_val)
+                # 布尔类型附状态描述
+                state = sig_def.one_state if raw_val else sig_def.zero_state
+                results[sig_name] = {
+                    "value": value, "unit": sig_def.unit, "validity": "valid",
+                    "raw": raw_val, "state": state,
+                }
+                continue
+            elif sig_def.data_type == "dis":
+                # 离散量: 附状态描述
+                state = sig_def.one_state if raw_val else sig_def.zero_state
+                results[sig_name] = {
+                    "value": raw_val, "unit": sig_def.unit, "validity": "valid",
+                    "raw": raw_val, "state": state,
+                }
+                continue
             else:
                 value = raw_val
 
@@ -217,6 +264,11 @@ class ICDParser:
         self.import_log = []
         self._is_loaded = False
 
+        # 格式识别: XML (Member_System_all_sender_icd_v6_1_1.xml) -> XML 解析引擎
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".xml":
+            return self._parse_xml_file(file_path)
+
         result = {
             "total_messages": 0,
             "total_signals": 0,
@@ -231,7 +283,6 @@ class ICDParser:
             result["errors"].append(f"文件不存在: {file_path}")
             self._log("格式识别", f"文件不存在: {file_path}", "error")
             return result
-        ext = os.path.splitext(file_path)[1].lower()
         if ext != ".json":
             self._log("格式识别", f"文件扩展名 {ext} 非标准 JSON 格式", "warning")
         self._log("格式识别", f"识别为 {ext or '未知'} 格式 ICD 文件: {os.path.basename(file_path)}", "info")
@@ -360,45 +411,77 @@ class ICDParser:
 
         return result
 
+    def _parse_xml_file(self, file_path: str) -> dict:
+        """
+        解析 XML 格式 ICD 文件 (Member_System_all_sender_icd_v6_1_1.xml)
+        流式提取 MemberSystem/端口/消息/DS/DP 全结构, 生成完整解析报告
+        """
+        from app.core.icd_xml_parser import parse_member_system_xml
+
+        self._log("格式识别", f"识别为 XML 格式 ICD 文件: {os.path.basename(file_path)}", "info")
+
+        parsed = parse_member_system_xml(file_path)
+        if parsed.get("status") != "ok":
+            self._log("格式识别", parsed.get("message", "XML 解析失败"), "error")
+            return {
+                "total_messages": 0, "total_signals": 0, "total_members": 0,
+                "conflicts": [], "errors": [parsed.get("message", "XML 解析失败")],
+                "format": "xml", "import_log": self.import_log,
+                "report": parsed.get("report", {}),
+            }
+
+        self.member_models = parsed["member_models"]
+        self.icd_entries = parsed["icd_entries"]
+        self._is_loaded = True
+
+        report = parsed["report"]
+        self._log("文件校验", f"XML 结构校验通过: {report['total_members']} 成员 / "
+                              f"{report['total_messages']} 消息 / {report['total_datasets']} DS / "
+                              f"{report['total_signals']} 信号", "info")
+        if report["errors"]:
+            self._log("文件校验", f"发现 {len(report['errors'])} 处错误", "error")
+        if report["missing_required"]:
+            self._log("完整性校验", f"发现 {len(report['missing_required'])} 处必填字段缺失", "warning")
+        if report["conflicts"]:
+            self._log("冲突检测", f"发现 {len(report['conflicts'])} 处冲突定义", "warning")
+        if report["duplicate_signals"]:
+            self._log("冲突检测", f"{report['duplicate_signals']} 个重名信号已自动加后缀保留", "info")
+        self._log("解析入库", f"成功解析 {report['total_messages']} 条消息 / "
+                              f"{report['total_signals']} 个信号", "info")
+
+        logger.info(f"XML ICD 解析完成: {report['total_members']} 成员, "
+                     f"{report['total_messages']} 消息, {report['total_signals']} 信号")
+
+        # 生成二进制缓存
+        self._save_cache()
+
+        return {
+            "total_messages": report["total_messages"],
+            "total_signals": report["total_signals"],
+            "total_members": report["total_members"],
+            "total_datasets": report["total_datasets"],
+            "conflicts": report["conflicts"],
+            "errors": report["errors"],
+            "format": "xml",
+            "import_log": self.import_log,
+            "report": report,
+        }
+
     def _save_cache(self):
         """将解析结果序列化为msgpack二进制快照"""
         try:
             import msgpack
+            from dataclasses import asdict
             cache_data = {
-                "member_systems": {},
+                "member_models": {
+                    m: {fn: asdict(fr) for fn, fr in model.frames.items()}
+                    for m, model in self.member_models.items()
+                },
                 "icd_entries": self.icd_entries,
             }
-            for member, model in self.member_models.items():
-                frames_data = {}
-                for fname, frame in model.frames.items():
-                    signals_data = {}
-                    for sname, sig in frame.signals.items():
-                        signals_data[sname] = {
-                            "bit_offset": sig.bit_offset,
-                            "bit_length": sig.bit_length,
-                            "resolution": sig.resolution,
-                            "offset": sig.offset,
-                            "unit": sig.unit,
-                            "min_val": sig.min_val,
-                            "max_val": sig.max_val,
-                            "data_type": sig.data_type,
-                        }
-                    frames_data[fname] = {
-                        "message_id": frame.message_id,
-                        "member_system": frame.member_system,
-                        "database_name": frame.database_name,
-                        "frame_name": frame.frame_name,
-                        "protocol": frame.protocol,
-                        "port_id": frame.port_id,
-                        "label_id": frame.label_id,
-                        "can_id": frame.can_id,
-                        "vl_id": frame.vl_id,
-                        "signals": signals_data,
-                    }
-                cache_data["member_systems"][member] = frames_data
 
             with open(ICD_CACHE_FILE, "wb") as f:
-                msgpack.packb(cache_data, use_bin_type=True)
+                f.write(msgpack.packb(cache_data, use_bin_type=True))
             logger.info(f"ICD快照已缓存: {ICD_CACHE_FILE}")
         except Exception as e:
             logger.error(f"ICD缓存保存失败: {e}")
@@ -417,32 +500,13 @@ class ICDParser:
             self.member_models = {}
             self.icd_entries = cache_data.get("icd_entries", [])
 
-            for member, frames_data in cache_data.get("member_systems", {}).items():
+            for member, frames_data in cache_data.get("member_models", {}).items():
                 model = MemberModel(member)
                 for fname, fdata in frames_data.items():
-                    frame = MessageFrame(
-                        message_id=fdata["message_id"],
-                        member_system=fdata["member_system"],
-                        database_name=fdata["database_name"],
-                        frame_name=fdata["frame_name"],
-                        protocol=fdata["protocol"],
-                        port_id=fdata.get("port_id"),
-                        label_id=fdata.get("label_id"),
-                        can_id=fdata.get("can_id"),
-                        vl_id=fdata.get("vl_id"),
-                    )
-                    for sname, sdata in fdata.get("signals", {}).items():
-                        frame.signals[sname] = SignalDef(
-                            name=sname,
-                            bit_offset=sdata["bit_offset"],
-                            bit_length=sdata["bit_length"],
-                            resolution=sdata.get("resolution", 1.0),
-                            offset=sdata.get("offset", 0.0),
-                            unit=sdata.get("unit", ""),
-                            min_val=sdata.get("min_val"),
-                            max_val=sdata.get("max_val"),
-                            data_type=sdata.get("data_type", "int"),
-                        )
+                    signals = {
+                        sn: SignalDef(**sd) for sn, sd in fdata.pop("signals", {})
+                    }
+                    frame = MessageFrame(**fdata, signals=signals)
                     model.add_frame(frame)
                 self.member_models[member] = model
 
@@ -483,6 +547,9 @@ class ICDParser:
                     "label_id": frame.label_id,
                     "can_id": frame.can_id,
                     "vl_id": frame.vl_id,
+                    "message_size": frame.message_size,
+                    "transmission_interval": frame.transmission_interval,
+                    "port_name": frame.port_name,
                     "signal_count": len(frame.signals),
                 })
         return frames
@@ -504,12 +571,20 @@ class ICDParser:
                 "name": sig.name,
                 "bit_offset": sig.bit_offset,
                 "bit_length": sig.bit_length,
+                "byte_offset": sig.byte_offset,
                 "resolution": sig.resolution,
                 "offset": sig.offset,
                 "unit": sig.unit,
                 "min_val": sig.min_val,
                 "max_val": sig.max_val,
                 "data_type": sig.data_type,
+                "data_format_type": sig.data_format_type,
+                "lsb_res": sig.lsb_res,
+                "multiplier": sig.multiplier,
+                "ohms_attribute": sig.ohms_attribute,
+                "one_state": sig.one_state,
+                "zero_state": sig.zero_state,
+                "label": sig.label,
             })
         return {
             "message_id": frame.message_id,
@@ -521,6 +596,10 @@ class ICDParser:
             "label_id": frame.label_id,
             "can_id": frame.can_id,
             "vl_id": frame.vl_id,
+            "message_size": frame.message_size,
+            "transmission_interval": frame.transmission_interval,
+            "msg_data_protocol_type": frame.msg_data_protocol_type,
+            "port_name": frame.port_name,
             "signals": signals,
         }
 
@@ -567,11 +646,22 @@ class ICDParser:
                         "signal_name": sig.name,
                         "bit_offset": sig.bit_offset,
                         "bit_length": sig.bit_length,
+                        "byte_offset": sig.byte_offset,
                         "resolution": sig.resolution,
                         "offset": sig.offset,
                         "unit": sig.unit,
                         "min_val": sig.min_val,
                         "max_val": sig.max_val,
+                        "data_format_type": sig.data_format_type,
+                        "lsb_res": sig.lsb_res,
+                        "multiplier": sig.multiplier,
+                        "ohms_attribute": sig.ohms_attribute,
+                        "one_state": sig.one_state,
+                        "zero_state": sig.zero_state,
+                        "label": sig.label,
+                        "message_size": frame.message_size,
+                        "transmission_interval": frame.transmission_interval,
+                        "port_name": frame.port_name,
                     })
         return entries
 

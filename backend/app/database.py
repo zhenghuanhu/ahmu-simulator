@@ -64,6 +64,19 @@ def _migrate_schema():
             "lru_code": "VARCHAR(50)",
             "flight_segment": "INTEGER",
         },
+        "icd_entries": {
+            "data_format_type": "VARCHAR(30)",
+            "byte_offset": "INTEGER",
+            "lsb_res": "FLOAT",
+            "multiplier": "FLOAT",
+            "ohms_attribute": "VARCHAR(50)",
+            "one_state": "VARCHAR(50)",
+            "zero_state": "VARCHAR(50)",
+            "label": "VARCHAR(50)",
+            "message_size": "INTEGER",
+            "transmission_interval": "INTEGER",
+            "port_name": "VARCHAR(100)",
+        },
     }
     try:
         with engine.connect() as conn:
@@ -422,15 +435,15 @@ class EventReport(Base):
 
 
 class ICDEntry(Base):
-    """ICD条目表 - ICD解析结果存储"""
+    """ICD条目表 - ICD解析结果存储 (兼容 JSON 与 XML 两种 ICD 来源)"""
     __tablename__ = "icd_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    message_id = Column(String(100), nullable=False, index=True)  # 成员系统-数据库-消息帧
+    message_id = Column(String(100), nullable=False, index=True)  # 成员系统-消息帧
     member_system = Column(String(50), index=True)
     database_name = Column(String(50))
     frame_name = Column(String(100))
-    protocol = Column(String(20))  # A664/A429/A825
+    protocol = Column(String(20))  # A664/A429/A825/ANALOG
     port_id = Column(Integer, nullable=True)
     label_id = Column(Integer, nullable=True)
     can_id = Column(Integer, nullable=True)
@@ -443,6 +456,18 @@ class ICDEntry(Base):
     unit = Column(String(20))
     min_val = Column(Float, nullable=True)
     max_val = Column(Float, nullable=True)
+    # --- XML 扩展字段 (航电 ICD 可追溯) ---
+    data_format_type = Column(String(30))          # DataFormatType (SINT/UBNR/BNR/BOOL/DIS/...)
+    byte_offset = Column(Integer, default=0)        # 消息内字节偏移 (DS.ByteOffsetWithinMsg)
+    lsb_res = Column(Float, nullable=True)          # LSB 分辨率
+    multiplier = Column(Float, nullable=True)       # 倍率
+    ohms_attribute = Column(String(50))             # OHMS 属性 (Fault/Parameter/ConfigurationReport)
+    one_state = Column(String(50))                  # 1 状态描述
+    zero_state = Column(String(50))                 # 0 状态描述
+    label = Column(String(50))                      # RDCU Label
+    message_size = Column(Integer, default=0)       # 消息字节大小
+    transmission_interval = Column(Integer, default=0)  # 发送周期 ms
+    port_name = Column(String(100))                 # 端口名
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 import json
+import os
 
 from app.database import get_db, ICDEntry
 from app.core.websocket_manager import ws_manager
@@ -539,14 +540,18 @@ async def save_lifecycle_data(req: LifecycleSaveRequest):
 # ==================== ICD管理 ====================
 
 def _persist_icd_entries(db: Session) -> int:
-    """将解析结果入库 ICDEntry 表 (重建: 先清空旧数据再写入)"""
+    """将解析结果入库 ICDEntry 表 (重建: 先清空旧数据再批量写入)
+
+    126051 条信号记录采用 bulk_insert_mappings 分批写入, 避免逐条 add 的性能开销
+    """
     from app.database import ICDEntry
     db.query(ICDEntry).delete()
     db.commit()
     entries = icd_parser.get_signal_entries()
-    for e in entries:
-        db.add(ICDEntry(**e))
-    db.commit()
+    batch_size = 2000
+    for i in range(0, len(entries), batch_size):
+        db.bulk_insert_mappings(ICDEntry, entries[i:i + batch_size])
+        db.commit()
     return len(entries)
 
 
@@ -554,13 +559,17 @@ def _persist_icd_entries(db: Session) -> int:
 async def upload_icd(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     导入标准格式ICD文件 (文件上传)
-    流程: 格式识别校验 -> 解析入库 -> 冲突检测 -> 导入日志
+    支持 JSON (自研简化格式) 与 XML (Member_System_all_sender_icd_v6_1_1) 两种格式
+    流程: 格式识别 -> 结构/字段校验 -> 冲突检测 -> 解析入库 -> 导入日志
     """
     from app.config import CACHE_DIR
-    if not file.filename or not file.filename.lower().endswith(".json"):
-        return {"status": "error", "message": "仅支持 JSON 格式 ICD 文件"}
+    fname = file.filename or ""
+    ext = os.path.splitext(fname)[1].lower()
+    if ext not in (".json", ".xml"):
+        return {"status": "error", "message": "仅支持 JSON 或 XML 格式 ICD 文件"}
+
     content = await file.read()
-    save_path = CACHE_DIR / f"uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    save_path = CACHE_DIR / f"uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
     save_path.write_bytes(content)
 
     result = icd_parser.parse_icd_file(str(save_path))
