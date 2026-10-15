@@ -77,6 +77,15 @@ def _migrate_schema():
             "transmission_interval": "INTEGER",
             "port_name": "VARCHAR(100)",
         },
+        "lifecycle_data": {
+            "data_source": "VARCHAR(20)",
+        },
+        "lifecycle_retrieval_logs": {
+            "data_source": "VARCHAR(20)",
+            "command_sent_at": "DATETIME",
+            "response_received_at": "DATETIME",
+            "response_result": "VARCHAR(20)",
+        },
     }
     try:
         with engine.connect() as conn:
@@ -277,6 +286,7 @@ class LifecycleData(Base):
     power_cycle_count = Column(Integer, default=0)   # 上电循环计数
     last_retrieved = Column(DateTime, default=datetime.utcnow, index=True)
     retrieval_status = Column(String(20), default="success")  # success/failed/timeout
+    data_source = Column(String(20), default="simulated")  # 数据来源: simulated(模拟)/real(真实)
 
 
 class ParamSnapshot(Base):
@@ -661,6 +671,10 @@ class LifecycleRetrievalLog(Base):
     power_on_time = Column(Integer, default=0)                 # 上电运行时间 (秒)
     power_cycle_count = Column(Integer, default=0)             # 上电循环计数
     error_message = Column(Text, nullable=True)                # 失败/拒绝原因
+    data_source = Column(String(20), default="simulated")      # 数据来源: simulated(模拟)/real(真实)
+    command_sent_at = Column(DateTime, nullable=True)          # 指令发送时间 (真实数据)
+    response_received_at = Column(DateTime, nullable=True)     # 设备响应时间 (真实数据)
+    response_result = Column(String(20), nullable=True)        # 响应结果: received/timeout
     operated_at = Column(DateTime, default=datetime.utcnow, index=True)  # 操作时间
 
     __table_args__ = (

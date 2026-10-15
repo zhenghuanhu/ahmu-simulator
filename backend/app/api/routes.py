@@ -9,6 +9,7 @@ from typing import Optional, List
 from datetime import datetime
 import json
 import os
+from loguru import logger
 
 from app.database import get_db, ICDEntry
 from app.core.websocket_manager import ws_manager
@@ -85,14 +86,37 @@ async def set_maintenance_switch(position: str = "ground_test"):
 
 
 @router.post("/system/force-mode")
-async def force_system_mode(mode: str = "maintenance"):
-    """强制切换系统模式 (测试用)"""
+async def force_system_mode(mode: str = "maintenance", operator: str = "admin"):
+    """强制切换系统模式 (调试用, 跳过30秒持续计时立即切换)
+
+    供管理员在配置页面一键快速切换维护/正常模式, 不经过30秒自动切换路径。
+    原有30秒自动切换机制 (set_switch + 信号驱动) 保持独立、不受影响。
+
+    mode: maintenance / normal
+    operator: 操作人标识 (可追溯)
+    """
+    # 模式校验
+    if mode not in ("maintenance", "normal"):
+        return {"status": "error", "message": f"无效模式: {mode} (仅支持 maintenance/normal)"}
+
     result = maintenance_service.force_mode(mode)
+    if result.get("status") == "error":
+        return result
+
+    logger.info(f"[ModeForce] 操作人 '{operator}' 强制切换系统模式: "
+                f"{result.get('previous')} → {mode} (跳过30秒计时)")
+
     await ws_manager.broadcast("mode_change", {
         "mode": mode,
         "previous": result.get("previous"),
+        "operator": operator,
+        "forced": True,
         "timestamp": datetime.utcnow().isoformat(),
     })
+    result["operator"] = operator
+    result["forced"] = True
+    result["skipped_hold"] = True
+    result["switched_at"] = datetime.utcnow().isoformat()
     return result
 
 
@@ -506,12 +530,13 @@ async def get_base_config(
 async def get_lifecycle_logs(
     status: Optional[str] = None,
     equip_id: Optional[str] = None,
+    data_source: Optional[str] = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """查询生命周期获取日志 (操作时间/操作用户/被操作的成员系统/操作状态)"""
-    return lifecycle_service.get_retrieval_logs(db, status, equip_id, page, size)
+    """查询生命周期获取日志 (操作时间/操作用户/被操作的成员系统/操作状态/数据来源)"""
+    return lifecycle_service.get_retrieval_logs(db, status, equip_id, data_source, page, size)
 
 
 @router.get("/lifecycle/members")

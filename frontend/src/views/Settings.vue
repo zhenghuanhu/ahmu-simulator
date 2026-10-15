@@ -88,6 +88,48 @@
         </div>
       </div>
     </div>
+
+    <!-- 维护模式调试 -->
+    <div class="ohms-panel st-section">
+      <div class="st-section-header">
+        <span class="ohms-title" style="font-size: 13px;">MAINTENANCE MODE DEBUG / 维护模式调试</span>
+      </div>
+      <div class="st-section-body">
+        <div class="st-desc">
+          管理员可一键快速切换系统模式，跳过 30 秒持续计时立即生效。原有 30 秒自动切换机制保持不变。
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label">当前模式</span>
+          <span class="st-field-value" :class="modeClass">{{ modeText }}</span>
+          <span v-if="modeInfo.hold_remaining > 0 && modeInfo.mode !== 'maintenance'" class="st-field-hint">
+            （维护条件计时中，剩余 {{ modeInfo.hold_remaining }} 秒后自动进入维护模式）
+          </span>
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label">快速切换</span>
+          <el-button
+            size="small"
+            type="warning"
+            @click="forceMode('maintenance')"
+            :loading="switchingMode"
+            :disabled="modeInfo.mode === 'maintenance'"
+          >
+            切换到维护模式
+          </el-button>
+          <el-button
+            size="small"
+            @click="forceMode('normal')"
+            :loading="switchingMode"
+            :disabled="modeInfo.mode === 'normal'"
+          >
+            切换到正常模式
+          </el-button>
+          <span v-if="switchResult" class="ohms-green" style="font-size: 12px;">{{ switchResult }}</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -95,6 +137,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLabelMode, LABEL_MODE_OPTIONS } from '../composables/useUiConfig'
+import { useWebSocket } from '../composables/useWebSocket'
+
+const { on } = useWebSocket()
 
 const { labelMode, setLabelMode, formatLabel } = useLabelMode()
 
@@ -203,8 +248,76 @@ const clearHistoryReports = () => {
     .catch(() => { /* 用户取消 */ })
 }
 
+// ==================== 维护模式调试 ====================
+
+const modeInfo = ref({
+  mode: 'normal',
+  hold_remaining: 0,
+  hold_elapsed: 0,
+  hold_duration: 30,
+})
+const switchingMode = ref(false)
+const switchResult = ref('')
+
+const modeText = computed(() => {
+  const m = modeInfo.value.mode
+  if (m === 'maintenance') return '维护模式 (MAINTENANCE)'
+  if (m === 'transitioning') return '切换中 (TRANSITIONING)'
+  return '正常模式 (NORMAL)'
+})
+
+const modeClass = computed(() => {
+  const m = modeInfo.value.mode
+  if (m === 'maintenance') return 'ohms-yellow'
+  if (m === 'transitioning') return 'ohms-yellow'
+  return 'ohms-green'
+})
+
+const fetchModeInfo = () => {
+  fetch(api('/api/v1/system/mode'))
+    .then(r => r.json())
+    .then(data => {
+      modeInfo.value.mode = data.mode || 'normal'
+      modeInfo.value.hold_remaining = data.hold_remaining ?? 0
+      modeInfo.value.hold_elapsed = data.hold_elapsed ?? 0
+      modeInfo.value.hold_duration = data.hold_duration ?? 30
+    })
+    .catch(() => { /* 忽略 */ })
+}
+
+const forceMode = (target) => {
+  const label = target === 'maintenance' ? '维护模式' : '正常模式'
+  ElMessageBox.confirm(
+    `确定立即切换到${label}？此操作将跳过 30 秒持续计时，立即生效。`,
+    '强制切换系统模式',
+    { confirmButtonText: '确认切换', cancelButtonText: '取消', type: 'warning' },
+  )
+    .then(() => {
+      switchingMode.value = true
+      switchResult.value = ''
+      fetch(api(`/api/v1/system/force-mode?mode=${target}&operator=admin`), { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            switchResult.value = `已强制切换到${label}（跳过 30 秒计时，操作人 admin）`
+            ElMessage.success(switchResult.value)
+            fetchModeInfo()
+          } else {
+            ElMessage.error(data.message || '切换失败')
+          }
+        })
+        .catch(() => ElMessage.error('Network error'))
+        .finally(() => { switchingMode.value = false })
+    })
+    .catch(() => { /* 用户取消 */ })
+}
+
 onMounted(() => {
   fetchFaultDiagConfig()
+  fetchModeInfo()
+  setInterval(fetchModeInfo, 5000)
+
+  on('mode_change', (data) => { fetchModeInfo() })
 })
 </script>
 

@@ -23,9 +23,18 @@ export function setSystemMode(mode) {
  */
 export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset', '/nvmdownload', '/lifecycle']
 
+/**
+ * 跨模式页面: 两种模式下始终可访问, 不受模式切换影响
+ * - 配置页 (SETTINGS): 系统级设置 (标签栏显示/故障诊断配置/维护模式调试),
+ *   需在正常与维护模式下均保持可用, 便于维护期间调整系统配置。
+ */
+export const ALWAYS_ALLOWED_PATHS = ['/settings']
+
 /** 判断路径在当前模式下是否可访问 */
 export function isPathAllowed(path, mode = systemMode.value) {
   if (path === '/login') return true
+  // 跨模式页面: 两种模式均放行
+  if (ALWAYS_ALLOWED_PATHS.includes(path)) return true
   if (mode === 'maintenance') {
     // 维护模式: 仅允许 5 个维护专属页面
     return MAINTENANCE_ONLY_PATHS.includes(path)

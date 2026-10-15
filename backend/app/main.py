@@ -82,6 +82,8 @@ async def lifespan(app: FastAPI):
     from app.services.maintenance_rx import maintenance_rx
     maintenance_rx.start_udp_receiver()
     await lifecycle_service.start()
+    # 启动生命周期 UDP 接收器 (监听飞控模块 FCS_OutputData_TO_OMS_BLK_5 端口 31696)
+    lifecycle_service.start_udp_receiver()
     await acars_service.start()
     await print_service.start()
     await engine_trim_service.start()
@@ -111,6 +113,7 @@ async def lifespan(app: FastAPI):
     from app.services.maintenance_rx import maintenance_rx
     maintenance_rx.stop_udp_receiver()
     await lifecycle_service.stop()
+    lifecycle_service.stop_udp_receiver()
     await acars_service.stop()
     await print_service.stop()
     await engine_trim_service.stop()
