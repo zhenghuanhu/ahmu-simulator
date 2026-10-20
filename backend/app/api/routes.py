@@ -345,6 +345,46 @@ async def get_param_atas():
     return {"items": param_service.get_ata_chapters()}
 
 
+@router.get("/params/config/export")
+async def export_param_config(db: Session = Depends(get_db)):
+    """导出参数配置 (生成 JSON 文件)"""
+    return param_service.export_param_config(db)
+
+
+@router.get("/params/config")
+async def get_param_config_list(
+    ata: Optional[str] = None,
+    recorded: Optional[bool] = None,
+    source: Optional[str] = None,
+    keyword: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """获取参数配置列表 (按 ATA/是否记录/来源筛选 + 关键字搜索 + 分页)"""
+    return param_service.get_param_config_list(db, ata, recorded, source, keyword, page, size)
+
+
+@router.get("/params/config/{param_name}")
+async def get_param_config_detail(param_name: str, db: Session = Depends(get_db)):
+    """获取单个参数配置详情"""
+    return param_service.get_param_config_detail(db, param_name)
+
+
+@router.put("/params/config/{param_name}")
+async def update_param_config(param_name: str, payload: dict, db: Session = Depends(get_db)):
+    """修改参数配置项 (基础 + 记录, 含校验)"""
+    operator = payload.get("operator", "TEST")
+    return param_service.update_param_config(db, param_name, payload, operator)
+
+
+@router.post("/params/config/batch")
+async def batch_update_param_config(payload: dict, db: Session = Depends(get_db)):
+    """批量修改参数配置 (如批量设置是否记录/是否显示/采样频率)"""
+    operator = payload.get("operator", "TEST")
+    return param_service.batch_update_param_config(db, payload, operator)
+
+
 @router.get("/params/history/{name}")
 async def get_param_history(name: str, limit: int = 100, db: Session = Depends(get_db)):
     """获取参数历史"""
@@ -353,13 +393,52 @@ async def get_param_history(name: str, limit: int = 100, db: Session = Depends(g
 
 @router.get("/params/report")
 async def get_param_report(ata: Optional[str] = None, db: Session = Depends(get_db)):
-    """获取参数报告 (参数报告标识/参数个数/参数名称/参数类型/参数数值/参数单位/参数记录时间/参数所属ATA)"""
+    """获取参数报告 (参数报告标识/参数个数/参数名称/参数类型/参数数值/参数单位/参数记录时间/参数所属ATA), 并自动保存历史记录"""
     return param_service.get_param_report(db, ata)
+
+
+@router.post("/params/report")
+async def create_param_report(payload: dict = None, db: Session = Depends(get_db)):
+    """获取参数报告并自动保存为历史记录 (支持自定义操作人)"""
+    ata = (payload or {}).get("ata")
+    operator = (payload or {}).get("operator", "manual")
+    return param_service.get_param_report(db, ata, operator)
+
+
+@router.get("/params/report/history")
+async def get_report_history(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    keyword: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """获取参数报告历史列表 (时间范围 + 关键字筛选/搜索 + 分页)"""
+    return param_service.get_report_history(db, start, end, keyword, page, size)
+
+
+@router.delete("/params/report/history")
+async def delete_report_history(db: Session = Depends(get_db)):
+    """删除全部参数报告历史记录"""
+    return param_service.delete_all_reports(db)
+
+
+@router.get("/params/report/history/{report_id}")
+async def get_report_history_detail(report_id: str, db: Session = Depends(get_db)):
+    """查看参数报告历史详情 (从快照加载, 不重新生成)"""
+    return param_service.get_report_history_detail(db, report_id)
+
+
+@router.post("/params/report/history/{report_id}/export")
+async def export_report_history(report_id: str, db: Session = Depends(get_db)):
+    """导出历史参数报告 (生成 JSON 文件)"""
+    return param_service.download_param_report(db, report_id)
 
 
 @router.post("/params/report/download")
 async def download_param_report(payload: dict = None, db: Session = Depends(get_db)):
-    """下传参数报告 (生成 JSON 文件)"""
+    """下传参数报告 (生成 JSON 文件, 兼容旧接口)"""
     report_id = (payload or {}).get("report_id")
     return param_service.download_param_report(db, report_id)
 
@@ -412,15 +491,31 @@ async def set_monitor_service(member_system: str, enabled: bool):
 
 @router.get("/params/monitor-services")
 async def get_monitor_services():
-    """获取成员系统参数监控服务状态"""
+    """获取成员系统参数监控服务状态 (含运行状态与模拟数据开关状态)"""
     return param_service.get_monitor_services()
+
+
+@router.get("/params/simulation-config")
+async def get_simulation_config():
+    """获取参数监控模拟数据开关配置"""
+    return param_service.get_simulation_config()
+
+
+class ParamSimulationConfigRequest(BaseModel):
+    simulation_enabled: bool = False
+
+
+@router.post("/params/simulation-config")
+async def update_simulation_config(req: ParamSimulationConfigRequest):
+    """设置参数监控模拟数据开关 (开启后为已启动监控服务的成员生成模拟数据渲染前端)"""
+    return param_service.set_simulation_mode(req.simulation_enabled)
 
 
 @router.post("/params/paa")
 async def receive_paa_params(payload: dict):
-    """接收 PAA 转发的参数, 用于飞机运行数据存储"""
+    """接收 PAA 转发的真实参数, 用于飞机运行数据存储与实时显示"""
     params = (payload or {}).get("params", [])
-    return param_service.receive_paa_params(params)
+    return await param_service.receive_paa_params(params)
 
 
 # ==================== 启动测试 ====================

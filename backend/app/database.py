@@ -86,6 +86,24 @@ def _migrate_schema():
             "response_received_at": "DATETIME",
             "response_result": "VARCHAR(20)",
         },
+        "param_reports": {
+            "report_name": "VARCHAR(120)",
+            "valid_count": "INTEGER",
+            "out_of_range_count": "INTEGER",
+            "invalid_count": "INTEGER",
+            "ata_scope": "VARCHAR(200)",
+            "data_source": "VARCHAR(20)",
+            "summary": "VARCHAR(300)",
+            "status": "VARCHAR(20)",
+            "export_status": "VARCHAR(20)",
+            "operator": "VARCHAR(50)",
+            "get_time": "DATETIME",
+        },
+        "param_configs": {
+            "config_source": "VARCHAR(20)",
+            "updated_at": "DATETIME",
+            "updated_by": "VARCHAR(50)",
+        },
     }
     try:
         with engine.connect() as conn:
@@ -343,20 +361,34 @@ class ParamConfig(Base):
     source_member = Column(String(50), nullable=True)       # 参数来源成员系统 (如 HF_HSCU)
     min_val = Column(Float, nullable=True)                  # 参数最小值
     max_val = Column(Float, nullable=True)                  # 参数最大值
+    config_source = Column(String(20), default="icd")       # 配置来源 icd/tool/manual
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # 最近更新时间
+    updated_by = Column(String(50), default="TEST")         # 最近修改人
 
 
 class ParamReport(Base):
-    """参数报告表 - 参数监控功能
-    参数报告标识/参数个数/参数内容/下传状态
+    """参数报告表 - 参数监控功能 (含历史记录)
+    报告标识/名称/参数个数/摘要/获取状态/导出状态/内容快照
     """
     __tablename__ = "param_reports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     report_id = Column(String(50), nullable=False, index=True)  # 参数报告标识 (如 PR-20260928-160000)
-    param_count = Column(Integer, default=0)                    # 参数个数
-    data_json = Column(Text)                                    # 报告内容 JSON
-    download_status = Column(String(20), default="stored")      # stored/downloaded
+    report_name = Column(String(120), nullable=True)            # 报告名称
+    param_count = Column(Integer, default=0)                    # 参数总数
+    valid_count = Column(Integer, default=0)                    # 有效参数数
+    out_of_range_count = Column(Integer, default=0)             # 越限参数数
+    invalid_count = Column(Integer, default=0)                  # 无效/不可用参数数
+    ata_scope = Column(String(200), nullable=True)              # 覆盖的 ATA 章节 (JSON 数组文本)
+    data_source = Column(String(20), nullable=True)             # 数据来源 real/simulated/mixed
+    summary = Column(String(300), nullable=True)                # 参数摘要文本
+    status = Column(String(20), default="success")              # 获取状态 success/failed
+    export_status = Column(String(20), default="none")          # 导出状态 none/exported
+    operator = Column(String(50), default="manual")             # 触发方式/操作人
+    data_json = Column(Text)                                    # 报告内容快照 JSON (供重新查看)
+    download_status = Column(String(20), default="stored")      # 下传状态 (兼容旧字段)
     file_path = Column(String(300), nullable=True)              # 下传文件路径
+    get_time = Column(DateTime, default=datetime.utcnow, index=True)  # 获取时间
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 

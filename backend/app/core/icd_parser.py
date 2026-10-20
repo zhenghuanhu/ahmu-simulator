@@ -504,7 +504,7 @@ class ICDParser:
                 model = MemberModel(member)
                 for fname, fdata in frames_data.items():
                     signals = {
-                        sn: SignalDef(**sd) for sn, sd in fdata.pop("signals", {})
+                        sn: SignalDef(**sd) for sn, sd in fdata.pop("signals", {}).items()
                     }
                     frame = MessageFrame(**fdata, signals=signals)
                     model.add_frame(frame)

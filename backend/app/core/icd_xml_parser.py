@@ -140,6 +140,9 @@ class XmlIcdParser:
         self.can_reuse_count = 0   # CAN ID 复用次数
         self.duplicate_signals = 0  # 业务信号重名数 (自动加后缀保留)
 
+        # 成员系统 ATA 映射 (Name -> ATA 章节号, 取前 2 位)
+        self._member_ata: dict[str, str] = {}
+
     # ==================== 信号提取 ====================
 
     def _extract_signal(self, dp: ET.Element, ds: Optional[ET.Element],
@@ -455,6 +458,7 @@ class XmlIcdParser:
             "message_size": frame.message_size,
             "transmission_interval": frame.transmission_interval,
             "port_name": frame.port_name,
+            "ata": self._member_ata.get(frame.member_system, ""),
         })
 
     # ==================== 成员系统处理 ====================
@@ -468,6 +472,9 @@ class XmlIcdParser:
 
         self.total_members += 1
         model = MemberModel(name)
+        # 保存成员系统 ATA 章节号 (ATA="21XXXX"/"2601"/"270000" 等 → 取前 2 位)
+        ata_raw = member_elem.get("ATA", "").strip()
+        self._member_ata[name] = ata_raw[:2] if ata_raw else ""
 
         # 遍历端口
         for port in list(member_elem):

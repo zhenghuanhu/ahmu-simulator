@@ -89,6 +89,31 @@
       </div>
     </div>
 
+    <!-- 参数监控配置 -->
+    <div class="ohms-panel st-section">
+      <div class="st-section-header">
+        <span class="ohms-title" style="font-size: 13px;">PARAMETER MONITORING / 参数监控配置</span>
+      </div>
+      <div class="st-section-body">
+        <div class="st-desc">
+          控制参数监控页面的数据来源。开启「模拟数据」后，将为已启动监控服务的成员系统周期生成模拟参数，
+          用于在无真实数据时测试与展示监控显示效果（卡片上会以黄色「模拟数据」标识区分）。
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label">模拟数据</span>
+          <el-switch v-model="paramSim.simulation_enabled" @change="saveParamSim" />
+          <span class="st-field-hint">
+            {{ paramSim.simulation_enabled ? '已开启：已启动监控的成员系统将显示模拟参数' : '已关闭：仅显示真实接收的参数数据' }}
+          </span>
+        </div>
+
+        <div class="st-actions">
+          <span v-if="paramSimSaved" class="ohms-green" style="font-size: 12px;">{{ paramSimSaved }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 维护模式调试 -->
     <div class="ohms-panel st-section">
       <div class="st-section-header">
@@ -248,6 +273,42 @@ const clearHistoryReports = () => {
     .catch(() => { /* 用户取消 */ })
 }
 
+// ==================== 参数监控配置 ====================
+
+const paramSim = ref({
+  simulation_enabled: false,
+})
+const paramSimSaved = ref('')
+
+const fetchParamSim = () => {
+  fetch(api('/api/v1/params/simulation-config'))
+    .then(r => r.json())
+    .then(data => {
+      paramSim.value.simulation_enabled = !!data.simulation_enabled
+    })
+    .catch(() => { /* 忽略 */ })
+}
+
+const saveParamSim = () => {
+  paramSimSaved.value = ''
+  fetch(api('/api/v1/params/simulation-config'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ simulation_enabled: paramSim.value.simulation_enabled }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        paramSim.value.simulation_enabled = data.simulation_enabled
+        paramSimSaved.value = `模拟数据已${data.simulation_enabled ? '开启' : '关闭'}，参数监控页面即时生效`
+        ElMessage.success(`模拟数据${data.simulation_enabled ? '开启' : '关闭'}`)
+      } else {
+        ElMessage.error(data.message || '保存失败')
+      }
+    })
+    .catch(() => ElMessage.error('Network error'))
+}
+
 // ==================== 维护模式调试 ====================
 
 const modeInfo = ref({
@@ -315,6 +376,7 @@ const forceMode = (target) => {
 onMounted(() => {
   fetchFaultDiagConfig()
   fetchModeInfo()
+  fetchParamSim()
   setInterval(fetchModeInfo, 5000)
 
   on('mode_change', (data) => { fetchModeInfo() })
