@@ -96,7 +96,7 @@ NVM_RESET_CONFIG = {
     # 重置类型: full/partial = NVM 数据重置; fault_history = 故障历史重置 (LRU Fault History Reset)
     "reset_types": ["full", "partial", "fault_history"],
     "max_concurrent_resets": 5,               # 最大并发重置数
-    "result_success_prob": 0.92,              # Mock 重置成功概率
+    "result_success_prob": 1.0,               # Mock 重置成功概率 (1.0=确定性成功, 保证端到端测试稳定)
 }
 
 # 打印输出配置 (4.3.10 数据重置管理 - 打印结果输出至电子盘)
@@ -116,7 +116,7 @@ NVM_DOWNLOAD_CONFIG = {
     "retrieve_timeout_sec": 15,                  # 获取超时 (秒)
     "max_concurrent_retrieves": 5,               # 最大并发获取数
     "data_size_range": [1024, 4 * 1024 * 1024],  # NVM 数据大小范围 (字节, 1KB~4MB)
-    "retrieve_success_prob": 0.95,               # Mock 获取成功概率
+    "retrieve_success_prob": 1.0,               # Mock 获取成功概率 (1.0=确定性成功, 保证端到端测试稳定)
     "progress_steps": 20,                        # 进度递增步数 (每步 ~0.1s)
 }
 
@@ -154,6 +154,23 @@ AIRCRAFT_STATUS_CONFIG = {
         "flight_altitude",             # 飞行高度 (大气)
         "brake_status",                # 刹车状态 (刹车系统)
         "maintenance_switch_position", # 维护开关位置 (驾驶舱控制板)
+    ],
+}
+
+# AFDX/A664 参数监控接收通道配置 (4.3.12 参数监控 - AFDX 数据链路)
+# 真实 AFDX 经虚拟链路(VL)承载; Mock 环境用 UDP 单播模拟, 每个通道监听一个 UDP 端口,
+# 收到报文后按 ICD 消息帧定义解码为信号并推送到参数监控。
+AFDX_PARAM_CONFIG = {
+    "listen_host": "0.0.0.0",   # UDP 监听地址
+    "channels": [
+        {
+            "name": "EEC_EICAS",                   # 通道名
+            "member_system": "HF_EEC_L_CHA",       # 成员系统 (ICD 成员名)
+            "frame_name": "A664_Msg_EEC_EICAS",    # ICD 消息帧名
+            "vl_id": 23275,                         # 虚拟链路 VL ID (来自 ICD)
+            "udp_port": 34800,                      # Mock UDP 监听端口
+            "enabled": True,
+        },
     ],
 }
 

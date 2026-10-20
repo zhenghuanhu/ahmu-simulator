@@ -141,12 +141,18 @@ def main():
     ok = d.get("status") == "ok" and bool(d.get("print_job_id"))
     results.append(assert_cond(ok, f"打印任务: {d.get('print_job_id')} (电子盘 {d.get('print_dir')})"))
 
-    time.sleep(3)  # 等待打印完成并生成 ps 文件
-    pj = call("GET", "/print/jobs?page=1&size=3")
-    items = pj.get("items", [])
-    ok = len(items) > 0 and items[0]["status"] == "completed" and bool(items[0]["file_path"])
+    # 轮询等待打印完成 (打印机可能 busy, 完成时间 1~5 秒不等)
+    print_job = None
+    for _ in range(20):  # 最多等 10 秒
+        time.sleep(0.5)
+        pj = call("GET", "/print/jobs?page=1&size=3")
+        items = pj.get("items", [])
+        if items and items[0]["status"] == "completed" and bool(items[0]["file_path"]):
+            print_job = items[0]
+            break
+    ok = print_job is not None
     results.append(assert_cond(
-        ok, f"打印结果 Successful + 生成 ps 文件: {items[0]['file_path'] if items else '--'}"))
+        ok, f"打印结果 Successful + 生成 ps 文件: {print_job['file_path'] if print_job else '--'}"))
 
     d = call("POST", "/nvm-reset/print/NVM-99999999-9999")
     ok = d.get("status") == "error"

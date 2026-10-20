@@ -74,6 +74,9 @@ async def lifespan(app: FastAPI):
 
     await fault_service.start()
     await param_service.start()
+    # 启动 AFDX/A664 参数监控接收通道 (UDP 监听 + ICD 信号解码)
+    from app.services.afdx_receiver import afdx_receiver
+    afdx_receiver.start(loop=asyncio.get_running_loop())
     await config_service.start()
     await startup_test_service.start()
     await data_load_service.start()
@@ -106,6 +109,8 @@ async def lifespan(app: FastAPI):
 
     await fault_service.stop()
     await param_service.stop()
+    from app.services.afdx_receiver import afdx_receiver
+    afdx_receiver.stop()
     await config_service.stop()
     await startup_test_service.stop()
     await data_load_service.stop()
@@ -151,7 +156,7 @@ app.include_router(api_router)
 
 # ==================== 维护模式权限校验 ====================
 
-# 维护模式下允许访问的 API 前缀 (对应 5 个维护功能 + 系统端点 + 登录)
+# 维护模式下允许访问的 API 前缀 (对应 5 个维护功能 + 打印 + 系统端点 + 登录)
 MAINTENANCE_ALLOWED_API_PREFIXES = (
     "/api/v1/system",        # 系统 (模式查询/切换/信号)
     "/api/v1/auth",          # 登录
@@ -161,6 +166,7 @@ MAINTENANCE_ALLOWED_API_PREFIXES = (
     "/api/v1/nvm-reset",     # 数据重置
     "/api/v1/nvm-download",  # 数据下载
     "/api/v1/lifecycle",     # 生命周期
+    "/api/v1/print",         # 打印管理 (维护模式下需查看打印任务/提交打印结果)
 )
 
 

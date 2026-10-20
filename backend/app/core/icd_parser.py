@@ -90,6 +90,11 @@ class MessageFrame:
                 if raw_val & sign_bit:
                     raw_val -= (1 << sig_def.bit_length)
                 value = raw_val * sig_def.resolution + sig_def.offset
+            elif (sig_def.data_type == "float" and sig_def.data_format_type == "FLOAT"
+                  and sig_def.bit_length in (32, 64)):
+                # IEEE 754 单/双精度浮点 (XML DataFormatType=FLOAT)
+                raw_bytes = raw_val.to_bytes(sig_def.bit_length // 8, "big")
+                value = struct.unpack(">f" if sig_def.bit_length == 32 else ">d", raw_bytes)[0]
             elif sig_def.data_type in ("uint", "float"):
                 value = raw_val * sig_def.resolution + sig_def.offset
             elif sig_def.data_type == "bool":

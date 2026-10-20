@@ -518,6 +518,15 @@ async def receive_paa_params(payload: dict):
     return await param_service.receive_paa_params(params)
 
 
+# ==================== AFDX 接收通道 ====================
+
+@router.get("/afdx/status")
+async def get_afdx_status():
+    """获取 AFDX/A664 参数监控接收通道运行状态"""
+    from app.services.afdx_receiver import afdx_receiver
+    return afdx_receiver.get_status()
+
+
 # ==================== 启动测试 ====================
 
 @router.post("/groundtest/start")

@@ -759,31 +759,50 @@ class ParamMonitorService:
         logger.info(f"成员系统 {member_system} 参数监控服务: {'启用' if enabled else '禁用'}")
         return {"status": "ok", "member_system": member_system, "enabled": enabled}
 
+    def _member_status(self, code: str, name: str, ata: str, display: dict) -> dict:
+        """构建单个成员系统的监控运行状态"""
+        enabled = self._monitor_services.get(code, False)
+        member_params = [n for n, c in self._params.items() if c.get("source_member") == code]
+        real_count = sum(1 for n in member_params if n in self._latest_values)
+        sim_count = sum(1 for n in member_params if n in self._sim_values)
+        last_update = None
+        for n in member_params:
+            v = display.get(n)
+            ts = v.get("timestamp") if v else None
+            if ts and (last_update is None or ts > last_update):
+                last_update = ts
+        return {
+            "memberSystem": code,
+            "memberName": name,
+            "ata": ata,
+            "enabled": enabled,
+            "paramCount": len(member_params),
+            "realCount": real_count,
+            "simCount": sim_count,
+            "lastUpdate": last_update,
+        }
+
     def get_monitor_services(self) -> dict:
-        """获取成员系统监控服务状态 (含运行状态: 启用状态/参数数/最近更新时间/数据来源)"""
+        """获取成员系统监控服务状态 (含名录成员 + ICD 参数来源成员)
+
+        名录成员来自 MEMBER_SYSTEMS, 另补充 param_configs 中实际出现的
+        ICD 成员系统 (如 HF_EEC_L_CHA), 使 AFDX/ICD 数据来源的成员也可启停监控。
+        """
         display = self._build_display_view()
         members = []
+        seen: set = set()
         for code, name, ata in MEMBER_SYSTEMS:
-            enabled = self._monitor_services.get(code, False)
-            member_params = [n for n, c in self._params.items() if c.get("source_member") == code]
-            real_count = sum(1 for n in member_params if n in self._latest_values)
-            sim_count = sum(1 for n in member_params if n in self._sim_values)
-            last_update = None
-            for n in member_params:
-                v = display.get(n)
-                ts = v.get("timestamp") if v else None
-                if ts and (last_update is None or ts > last_update):
-                    last_update = ts
-            members.append({
-                "memberSystem": code,
-                "memberName": name,
-                "ata": ata,
-                "enabled": enabled,
-                "paramCount": len(member_params),
-                "realCount": real_count,
-                "simCount": sim_count,
-                "lastUpdate": last_update,
-            })
+            seen.add(code)
+            members.append(self._member_status(code, name, ata, display))
+
+        # 补充 ICD 参数来源成员
+        for name, cfg in self._params.items():
+            sm = cfg.get("source_member") or ""
+            if not sm or sm in seen:
+                continue
+            seen.add(sm)
+            ata = (cfg.get("ata") or "").split("-")[0] if cfg.get("ata") else ""
+            members.append(self._member_status(sm, sm, ata, display))
 
         return {
             "memberList": members,
@@ -875,6 +894,33 @@ class ParamMonitorService:
             return {"status": "error", "message": str(e)}
         finally:
             db.close()
+
+    # ==================== AFDX 数据接收 (参数监控) ====================
+
+    async def ingest_afdx_signals(self, member_system: str, decoded_signals: dict) -> dict:
+        """接收 AFDX 通道解码后的信号, 更新参数监控 (真实数据路径)
+
+        member_system: 来源成员系统 (ICD 成员名, 如 HF_EEC_L_CHA)
+        decoded_signals: icd_afdx.decode_frame 返回的信号字典 {信号名: {value/unit/validity/...}}
+        复用 receive_paa_params 完成监控启停判断、快照入库与 WebSocket 广播。
+        """
+        params = []
+        for name, s in decoded_signals.items():
+            if not isinstance(s, dict):
+                continue
+            value = s.get("value")
+            if value is None:
+                continue
+            params.append({
+                "name": name,
+                "value": value,
+                "unit": s.get("unit"),
+                "validity": s.get("validity", "valid"),
+                "source_member": member_system,
+            })
+        if not params:
+            return {"status": "ok", "saved": 0, "skipped": 0, "data_source": DATA_SOURCE_REAL}
+        return await self.receive_paa_params(params)
 
     # ==================== 模拟数据开关与生成 ====================
 
