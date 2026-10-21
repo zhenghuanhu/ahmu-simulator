@@ -23,6 +23,9 @@ backend/*.db
 # 运行时数据 (数据库/打印输出 ps 文件)
 backend/data/
 
+# 打印测试临时输出目录
+backend/tests/_tmp_print_received/
+
 # 运行时缓存 (ICD快照/演示ICD/上传临时文件)
 backend/cache/
 

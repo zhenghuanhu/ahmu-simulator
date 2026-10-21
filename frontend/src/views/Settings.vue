@@ -114,6 +114,50 @@
       </div>
     </div>
 
+    <!-- 打印配置 -->
+    <div class="ohms-panel st-section">
+      <div class="st-section-header">
+        <span class="ohms-title" style="font-size: 13px;">PRINT MANAGEMENT / 打印配置</span>
+      </div>
+      <div class="st-section-body">
+        <div class="st-desc">
+          控制打印管理模块在无外部打印机时是否由仿真器内置模拟完成打印。开启后，无打印机环境也能完成打印
+          （生成 ps 文件、任务状态 Successful）；关闭后，严格依赖外部打印机经 ARINC744A 协议响应，无响应则判打印失败。
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label">内置模拟打印</span>
+          <el-switch v-model="printCfg.simulated_print_enabled" @change="savePrintCfg" />
+          <span class="st-field-hint">
+            {{ printCfg.simulated_print_enabled ? '已启用：无外部打印机时由仿真器内置模拟完成打印' : '已禁用：严格依赖外部打印机，无响应判打印失败' }}
+          </span>
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label">打印输出目录</span>
+          <el-input
+            v-model="printCfg.output_dir"
+            size="small"
+            style="width: 300px;"
+            placeholder="相对 DATA_DIR 的目录名，或绝对路径"
+            @keyup.enter="savePrintDir"
+          />
+          <el-button size="small" type="primary" @click="savePrintDir" :loading="savingPrintDir">保存目录</el-button>
+        </div>
+
+        <div class="st-field">
+          <span class="st-field-label"></span>
+          <span class="st-field-hint">
+            本机实际落盘：{{ printCfg.print_dir_real }}　·　电子盘（真机参考，本机无 A 盘）：{{ printCfg.print_dir }}
+          </span>
+        </div>
+
+        <div class="st-actions">
+          <span v-if="printCfgSaved" class="ohms-green" style="font-size: 12px;">{{ printCfgSaved }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 维护模式调试 -->
     <div class="ohms-panel st-section">
       <div class="st-section-header">
@@ -309,6 +353,78 @@ const saveParamSim = () => {
     .catch(() => ElMessage.error('Network error'))
 }
 
+// ==================== 打印配置 ====================
+
+const printCfg = ref({
+  simulated_print_enabled: true,
+  output_dir: 'printlog',
+  print_dir: 'A:\\printlog',
+  print_dir_real: '',
+})
+const printCfgSaved = ref('')
+const savingPrintDir = ref(false)
+
+const fetchPrintCfg = () => {
+  fetch(api('/api/v1/print/config'))
+    .then(r => r.json())
+    .then(data => {
+      printCfg.value.simulated_print_enabled = !!data.simulated_print_enabled
+      printCfg.value.output_dir = data.output_dir || 'printlog'
+      printCfg.value.print_dir = data.print_dir || 'A:\\printlog'
+      printCfg.value.print_dir_real = data.print_dir_real || ''
+    })
+    .catch(() => { /* 忽略 */ })
+}
+
+const savePrintCfg = () => {
+  printCfgSaved.value = ''
+  fetch(api('/api/v1/print/config'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ simulated_print_enabled: printCfg.value.simulated_print_enabled }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        printCfg.value.simulated_print_enabled = data.simulated_print_enabled
+        printCfgSaved.value = `内置模拟打印已${data.simulated_print_enabled ? '启用' : '禁用'}，打印管理模块即时生效`
+        ElMessage.success(`内置模拟打印${data.simulated_print_enabled ? '启用' : '禁用'}`)
+      } else {
+        ElMessage.error(data.message || '保存失败')
+      }
+    })
+    .catch(() => ElMessage.error('后端服务不可达，请确认 AHMU 仿真器已启动'))
+}
+
+const savePrintDir = () => {
+  const dir = (printCfg.value.output_dir || '').trim()
+  if (!dir) {
+    ElMessage.warning('打印输出目录不能为空')
+    return
+  }
+  savingPrintDir.value = true
+  printCfgSaved.value = ''
+  fetch(api('/api/v1/print/config'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ output_dir: dir }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        printCfg.value.output_dir = data.output_dir
+        printCfg.value.print_dir = data.print_dir
+        printCfg.value.print_dir_real = data.print_dir_real
+        printCfgSaved.value = `打印输出目录已更新：${data.print_dir_real}`
+        ElMessage.success('打印输出目录已保存')
+      } else {
+        ElMessage.error(data.message || '保存失败')
+      }
+    })
+    .catch(() => ElMessage.error('后端服务不可达，请确认 AHMU 仿真器已启动'))
+    .finally(() => { savingPrintDir.value = false })
+}
+
 // ==================== 维护模式调试 ====================
 
 const modeInfo = ref({
@@ -377,6 +493,7 @@ onMounted(() => {
   fetchFaultDiagConfig()
   fetchModeInfo()
   fetchParamSim()
+  fetchPrintCfg()
   setInterval(fetchModeInfo, 5000)
 
   on('mode_change', (data) => { fetchModeInfo() })

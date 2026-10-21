@@ -106,6 +106,18 @@ PRINT_CONFIG = {
     "output_dir": "printlog",          # 打印输出目录名 (位于 DATA_DIR 下)
     "file_extension": "ps",            # 打印文件格式 (PostScript)
     "simulated_drive": "A:\\printlog",  # 模拟的电子盘路径 (展示/说明用)
+    # 是否启用内置模拟打印功能。
+    # True  = 无外部打印机响应时, 由仿真器内置模拟完成打印(生成 ps + 状态 completed), 便于无打印机环境开发联调 (默认)
+    # False = 严格依赖外部打印机(真实/模拟打印机经 UDP 协议响应), 无响应则判打印失败 (用于协议符合性验证)
+    "simulated_print_enabled": True,
+    # ARINC744A 打印协议通道 (Mock UDP, 对齐 ICD Printer_GIPC_Data VL 23247)
+    "afdx_vl_id": 23247,               # Printer_GIPC_Data 虚拟链路 VL ID
+    "send_port": 34801,                # AHMU -> 打印机 (AFDX 打印数据发送端口)
+    "recv_port": 34802,                # 打印机 -> AHMU (A429 ACK/状态接收端口)
+    "recv_host": "0.0.0.0",            # 接收监听地址
+    "block_size": 150,                 # 每块有效数据大小 (对齐 ETest BLOCK_SIZE)
+    "ack_timeout_sec": 3,              # ACK 超时 (秒)
+    "max_retry": 3,                    # 最大重发次数
 }
 
 # 数据下载管理功能配置 (4.3.14 数据下载管理)

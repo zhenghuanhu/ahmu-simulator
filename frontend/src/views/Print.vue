@@ -6,8 +6,9 @@
       <span class="ohms-dim" style="margin-left: 8px; font-size: var(--pr-fs-aux);">ARINC744A</span>
       <span class="status-dot" :class="printerStatus === 'ready' ? 'green' : printerStatus === 'busy' ? 'yellow' : 'red'"></span>
       <span :class="printerStatusClass">{{ printerStatusText }}</span>
+      <span class="pr-mode-badge" :class="simPrintEnabled ? 'on' : 'off'">内置模拟打印: {{ simPrintEnabled ? '开' : '关' }}</span>
       <span style="flex: 1;"></span>
-      <span class="ohms-dim" style="font-size: var(--pr-fs-aux);">电子盘打印目录：{{ printDir }}</span>
+      <span class="ohms-dim" style="font-size: var(--pr-fs-aux);">电子盘打印目录：{{ printDir }}<span v-if="printDirReal" class="ohms-dim" style="margin-left: 4px;">(本机: {{ printDirReal }})</span></span>
     </div>
 
     <!-- 提交打印 -->
@@ -65,6 +66,9 @@
     <div class="ohms-panel pr-jobs-panel">
       <div class="pr-panel-header">
         <span class="ohms-title" style="font-size: var(--pr-fs-panel);">PRINT JOBS / 打印任务记录</span>
+        <span class="ohms-dim" style="margin-left: 12px; font-size: var(--pr-fs-aux);">{{ jobs.length }} 条</span>
+        <span style="flex: 1;"></span>
+        <el-button size="small" type="danger" plain @click="clearJobs" :disabled="jobs.length === 0">清除</el-button>
       </div>
       <el-table :data="jobs" size="small" max-height="220" v-loading="loading">
         <el-table-column label="模式" width="110">
@@ -90,7 +94,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useWebSocket } from '../composables/useWebSocket'
 
 const { on, off } = useWebSocket()
@@ -103,6 +107,8 @@ const printContent = ref('')
 const activePrint = ref(null)
 const printProgress = ref(0)
 const printDir = ref('A:\\printlog')
+const printDirReal = ref('')
+const simPrintEnabled = ref(true)
 const frames = ref([])
 const framesRef = ref(null)
 
@@ -134,6 +140,10 @@ const submitPrint = () => {
         ElMessage.error(data.message || '提交失败')
       }
     })
+    .catch(() => {
+      ElMessage.error('后端服务不可达，请确认 AHMU 仿真器已启动')
+      activePrint.value = null
+    })
 }
 
 const fetchJobs = () => {
@@ -143,8 +153,42 @@ const fetchJobs = () => {
     .then(data => {
       jobs.value = data.items || []
       if (data.print_dir) printDir.value = data.print_dir
+      if (data.print_dir_real) printDirReal.value = data.print_dir_real
     })
     .finally(() => { loading.value = false })
+}
+
+const fetchPrintConfig = () => {
+  fetch(api('/api/v1/print/config'))
+    .then(r => r.json())
+    .then(data => {
+      simPrintEnabled.value = !!data.simulated_print_enabled
+      if (data.print_dir) printDir.value = data.print_dir
+      if (data.print_dir_real) printDirReal.value = data.print_dir_real
+    })
+    .catch(() => { /* 忽略 */ })
+}
+
+const clearJobs = () => {
+  ElMessageBox.confirm(
+    `确定清除全部 ${jobs.value.length} 条打印任务记录？此操作不可恢复。`,
+    '清除打印任务记录',
+    { confirmButtonText: '确认清除', cancelButtonText: '取消', type: 'warning' },
+  )
+    .then(() => {
+      fetch(api('/api/v1/print/jobs'), { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            ElMessage.success(`已清除 ${data.deleted} 条打印任务记录`)
+            fetchJobs()
+          } else {
+            ElMessage.error(data.message || '清除失败')
+          }
+        })
+        .catch(() => ElMessage.error('后端服务不可达，请确认 AHMU 仿真器已启动'))
+    })
+    .catch(() => { /* 用户取消 */ })
 }
 
 const frameText = (f) => {
@@ -185,6 +229,7 @@ const scrollFrames = async () => {
 
 onMounted(() => {
   fetchJobs()
+  fetchPrintConfig()
 
   on('printer_status', (data) => {
     printerStatus.value = data.status
@@ -258,6 +303,24 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.pr-mode-badge {
+  font-size: var(--pr-fs-aux);
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid;
+}
+.pr-mode-badge.on {
+  color: #00ff88;
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.08);
+}
+.pr-mode-badge.off {
+  color: #ffd966;
+  border-color: #b38600;
+  background: rgba(255, 217, 102, 0.08);
 }
 
 .pr-submit-panel,

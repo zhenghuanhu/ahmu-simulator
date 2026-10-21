@@ -829,6 +829,35 @@ async def get_print_jobs(page: int = 1, size: int = 20, db: Session = Depends(ge
     return print_service.get_print_jobs(db, page, size)
 
 
+@router.get("/print/status")
+async def get_print_status():
+    """获取打印机状态 (含来源标识: real=真实上报 / simulated=模拟生成)"""
+    return print_service.get_printer_status()
+
+
+class PrintConfigRequest(BaseModel):
+    simulated_print_enabled: Optional[bool] = None
+    output_dir: Optional[str] = None
+
+
+@router.get("/print/config")
+async def get_print_config():
+    """获取打印配置 (内置模拟打印开关 + 打印输出目录)"""
+    return print_service.get_print_config()
+
+
+@router.post("/print/config")
+async def update_print_config(req: PrintConfigRequest):
+    """设置打印配置 (内置模拟打印开关 / 打印输出目录)"""
+    return print_service.set_print_config(req.simulated_print_enabled, req.output_dir)
+
+
+@router.delete("/print/jobs")
+async def delete_print_jobs(db: Session = Depends(get_db)):
+    """清除全部打印任务记录"""
+    return print_service.delete_all_jobs(db)
+
+
 # ==================== 发动机配平 (4.3.9) ====================
 
 @router.post("/engine-trim/command")
