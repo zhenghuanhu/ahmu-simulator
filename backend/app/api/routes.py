@@ -798,9 +798,33 @@ async def icd_parse_demo(req: dict):
 
 # ==================== ACARS ====================
 
+class ACARSConfigRequest(BaseModel):
+    priority: Optional[int] = None
+    downlink_channel: Optional[str] = None
+    trigger_mode: Optional[str] = None
+
+
+@router.get("/acars/config")
+async def get_acars_config():
+    """获取 ACARS 传输配置 (优先级/下传链路/触发逻辑/链路状态)"""
+    return acars_service.get_config()
+
+
+@router.post("/acars/config")
+async def update_acars_config(req: ACARSConfigRequest):
+    """设置 ACARS 传输配置 (优先级/下传链路/触发逻辑)"""
+    return acars_service.set_config(req.priority, req.downlink_channel, req.trigger_mode)
+
+
+@router.get("/acars/status")
+async def get_acars_status():
+    """获取 ACARS 链路状态 (idle/busy/lost)"""
+    return acars_service.get_link_status()
+
+
 @router.post("/acars/send")
-async def send_acars(message_type: str, content: str, priority: int = 1):
-    """发送ACARS消息"""
+async def send_acars(message_type: str, content: str, priority: Optional[int] = None):
+    """手动触发 ACARS 下行发送 (经 ARINC619 握手)"""
     return await acars_service.send_downlink(message_type, content, priority)
 
 
@@ -813,6 +837,12 @@ async def get_acars_messages(
 ):
     """获取ACARS消息列表"""
     return acars_service.get_messages(db, direction, page, size)
+
+
+@router.delete("/acars/messages")
+async def delete_acars_messages(db: Session = Depends(get_db)):
+    """清除全部 ACARS 消息记录"""
+    return acars_service.delete_all_messages(db)
 
 
 # ==================== 打印管理 ====================

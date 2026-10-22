@@ -186,6 +186,29 @@ AFDX_PARAM_CONFIG = {
     ],
 }
 
+# ACARS 管理功能配置 (4.3.x ACARS 数据链通信)
+# 需求: AHMU 仿真器仅实现 AHMU 自身功能——提取内部数据(故障/失效+FDE/构型/事件+参数)
+#       -> 整合为结构化维护数据包 -> 封装 A664 帧(载荷=维护数据包) -> 经 A664 总线发送;
+#       接收 CPM 转发的上行 EOR 请求与 A664 ACK; 支持配置优先级/下传链路/触发逻辑;
+#       监控链路状态(idle/busy/lost)。ARINC619 封装/664↔429 转换/CMU 由下游模拟程序合并实现。
+ACARS_CONFIG = {
+    "recv_port": 34810,              # AHMU 接收上行 (CPM 发送 EOR 请求/ACK -> AHMU 接收)
+    "send_port": 34811,              # AHMU 发送下行 (AHMU 发送 A664 维护数据 -> CPM 接收)
+    "recv_host": "0.0.0.0",          # UDP 接收监听地址
+    "priority": 1,                   # 默认优先级: 0=low, 1=normal, 2=high
+    "downlink_channel": "a664",      # 下传链路: a664(主, AFDX)/a429(备)
+    "trigger_mode": "on_request",    # 触发逻辑: on_request(上行请求触发)/periodic(周期)/event(事件触发)
+    "ack_timeout_sec": 3,            # A664 ACK 等待超时 (秒)
+    "max_retry": 3,                  # 下行发送最大重发次数
+    "afdx_vl_id": 20086,             # A653_OUT_DL_CMU_MSG 虚拟链路 VL ID (来自 ICD)
+    "eor_list": [
+        "DNL_ACMF101/0/EOR", "DNL_ACMF102/0/EOR", "DNL_ACMF103/0/EOR",
+        "DNL_ACMF104/0/EOR", "DNL_ACMF105/0/EOR", "DNL_ACMF106/0/EOR",
+        "DNL_ACMF201/0/EOR", "DNL_ACMF202/0/EOR",
+        "DNL_ACMF301/0/EOR", "DNL_ACMF401/0/EOR",
+    ],
+}
+
 # 维护模式条件 (三者同时满足且持续超过30s)
 #   "空/地"信号=地 (All_Gear_WOW=True) / 空速<80kts / 维护开关=地面测试或数据加载
 MAINTENANCE_MODE_CONDITIONS = {
