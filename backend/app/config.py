@@ -169,6 +169,20 @@ AIRCRAFT_STATUS_CONFIG = {
     ],
 }
 
+# 飞机状态消息 接收/回传通道配置 (4.3.7 飞机状态消息)
+# 需求: AHMU 接收飞机事件信息(含事件参数 FMS_IC_1_PARA、UTC_TIME、ICAO_CODE 等)与 8 个双源参数,
+#       计算飞机状态后经 A664 回传飞机状态消息。
+# Mock 环境用 UDP 单播模拟 A664: 测试端(模拟起落架/大气/飞管/发动机等)发飞机事件信息到 recv_port,
+# AHMU 计算后经 send_port 回传飞机状态消息给测试端。
+AIRCRAFT_STATUS_RX_CONFIG = {
+    "recv_host": "0.0.0.0",   # UDP 接收监听地址 (接收飞机事件信息/参数)
+    "recv_port": 34820,        # AHMU 接收飞机事件信息端口 (测试端发送到此处)
+    "send_port": 34821,        # AHMU 回传飞机状态消息端口 (测试端监听此处)
+    "event_params": [          # 事件关联参数 (飞机事件信息中的事件参数)
+        "fms_ic_1_para",       # FMS 综合计算机 1 参数 (FMS_IC_1_PARA)
+    ],
+}
+
 # AFDX/A664 参数监控接收通道配置 (4.3.12 参数监控 - AFDX 数据链路)
 # 真实 AFDX 经虚拟链路(VL)承载; Mock 环境用 UDP 单播模拟, 每个通道监听一个 UDP 端口,
 # 收到报文后按 ICD 消息帧定义解码为信号并推送到参数监控。

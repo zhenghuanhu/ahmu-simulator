@@ -80,30 +80,89 @@ def _decode_iso5(data: bytes) -> str:
 
 
 def _parse_icao(value) -> int:
-    """将 ICAO 码 (str/int) 解析为 24 位整数"""
+    """将 ICAO 码解析为 24 位整数 (Mode S 地址)
+
+    Aircraft_Status_Msg 的 ICAO_Code 为 UINT 24 位 Mode S 地址,
+    规范表示法为 6 位十六进制 (如 0x780123, 与 unpack 的 f"{:06X}" 对应)。
+    兼容: int 原样取低 24 位; str 支持 0x/0X 前缀、纯十六进制、纯十进制。
+    注意: 不再尝试八进制, 消除「十六进制优先 vs 八进制」的歧义
+          (ICAO 应答机 squawk 虽为八进制, 但此处 24 位字段语义是 Mode S 十六进制地址)。
+    """
     if isinstance(value, int):
         return value & 0xFFFFFF
     s = str(value).strip()
-    for base in (16, 8, 10):
+    if not s:
+        return 0
+    if s.lower().startswith("0x"):
         try:
-            return int(s, base) & 0xFFFFFF
+            return int(s, 16) & 0xFFFFFF
         except ValueError:
-            continue
-    return 0
+            return 0
+    # 优先十六进制 (Mode S 地址标准), 回退十进制 (纯数字字符串)
+    try:
+        return int(s, 16) & 0xFFFFFF
+    except ValueError:
+        try:
+            return int(s, 10) & 0xFFFFFF
+        except ValueError:
+            return 0
 
 
 def _encode_registration(reg: str) -> bytes:
-    """注册号 (最多 9 字符) → 12 字节: String_Length(2) + 字符(9) + PAD(1)"""
-    raw = reg.encode("ascii", "ignore")[:9]
-    return len(raw).to_bytes(2, "big") + raw.ljust(9, b"\x00") + b"\x00"
+    """注册号 (最多 9 字符) → 12 字节, 按 ICD DS_5 倒序交错布局
+
+    字节 0=Char_2, 1=Char_1, 2~3=String_Length_1, 4=Char_6, 5=Char_5, 6=Char_4,
+    7=Char_3, 8=PAD, 9=Char_9, 10=Char_8, 11=Char_7
+    """
+    c = reg.encode("ascii", "ignore")[:9].ljust(9, b"\x00")
+    raw_len = min(len(reg.encode("ascii", "ignore")), 9)
+    buf = bytearray(12)
+    buf[0] = c[1]   # Reg_Num_Char_2
+    buf[1] = c[0]   # Reg_Num_Char_1
+    buf[2:4] = raw_len.to_bytes(2, "big")  # String_Length_1
+    buf[4] = c[5]   # Reg_Num_Char_6
+    buf[5] = c[4]   # Reg_Num_Char_5
+    buf[6] = c[3]   # Reg_Num_Char_4
+    buf[7] = c[2]   # Reg_Num_Char_3
+    buf[8] = 0      # PAD
+    buf[9] = c[8]   # Reg_Num_Char_9
+    buf[10] = c[7]  # Reg_Num_Char_8
+    buf[11] = c[6]  # Reg_Num_Char_7
+    return bytes(buf)
 
 
 def _encode_flight_airport(flight_no: str, dep: str, dest: str) -> bytes:
-    """航班号(8) + 出发机场(4) + 目的机场(4) → 20 字节: String_Length(2) + 字符(16) + PAD(2)"""
-    raw = (flight_no.encode("ascii", "ignore")[:8].ljust(8, b"\x00")
-           + dep.encode("ascii", "ignore")[:4].ljust(4, b"\x00")
-           + dest.encode("ascii", "ignore")[:4].ljust(4, b"\x00"))
-    return len(flight_no.encode("ascii", "ignore")).to_bytes(2, "big") + raw + b"\x00\x00"
+    """航班号(8) + 出发机场(4) + 目的机场(4) → 20 字节, 按 ICD DS_6 倒序交错布局
+
+    字节 0=Flight_Num_Char_2, 1=Flight_Num_Char_1, 2~3=String_Length_2,
+    4~7=Flight_Num_Char_6/5/4/3, 8=Dest_Char_2, 9=Dest_Char_1,
+    10=Flight_Num_Char_8, 11=Flight_Num_Char_7, 12=Dep_Char_2, 13=Dep_Char_1,
+    14=Dest_Char_4, 15=Dest_Char_3, 16~17=PAD, 18=Dep_Char_4, 19=Dep_Char_3
+    """
+    fn = flight_no.encode("ascii", "ignore")[:8].ljust(8, b"\x00")
+    de = dep.encode("ascii", "ignore")[:4].ljust(4, b"\x00")
+    ds = dest.encode("ascii", "ignore")[:4].ljust(4, b"\x00")
+    fn_len = min(len(flight_no.encode("ascii", "ignore")), 8)
+    buf = bytearray(20)
+    buf[0] = fn[1]   # Flight_Num_Char_2
+    buf[1] = fn[0]   # Flight_Num_Char_1
+    buf[2:4] = fn_len.to_bytes(2, "big")  # String_Length_2
+    buf[4] = fn[5]   # Flight_Num_Char_6
+    buf[5] = fn[4]   # Flight_Num_Char_5
+    buf[6] = fn[3]   # Flight_Num_Char_4
+    buf[7] = fn[2]   # Flight_Num_Char_3
+    buf[8] = ds[1]   # Destination_Airport_Char_2
+    buf[9] = ds[0]   # Destination_Airport_Char_1
+    buf[10] = fn[7]  # Flight_Num_Char_8
+    buf[11] = fn[6]  # Flight_Num_Char_7
+    buf[12] = de[1]  # Departure_Airport_Char_2
+    buf[13] = de[0]  # Departure_Airport_Char_1
+    buf[14] = ds[3]  # Destination_Airport_Char_4
+    buf[15] = ds[2]  # Destination_Airport_Char_3
+    buf[16:18] = b"\x00\x00"  # PAD
+    buf[18] = de[3]  # Departure_Airport_Char_4
+    buf[19] = de[2]  # Departure_Airport_Char_3
+    return bytes(buf)
 
 
 def pack_aircraft_status(flight_phase: int,
@@ -170,16 +229,20 @@ def unpack_aircraft_status(data: bytes) -> dict:
     global_abort_flag = bool(buf[OFFSET_ABORT])
     icao_code = int.from_bytes(buf[OFFSET_ICAO:OFFSET_ICAO + 3], "big")
 
-    # 注册号 (12 字节: String_Length(2) + 字符)
-    reg_len = int.from_bytes(buf[OFFSET_REG:OFFSET_REG + 2], "big")
-    registration = _decode_iso5(buf[OFFSET_REG + 2:OFFSET_REG + 2 + min(reg_len, 9)])
+    # 注册号 (12 字节, 倒序交错: Char_2/Char_1/StrLen/Char_6/5/4/3/PAD/Char_9/8/7)
+    reg_raw = buf[OFFSET_REG:OFFSET_REG + 12]
+    reg_len = int.from_bytes(reg_raw[2:4], "big")
+    reg_chars = [reg_raw[1], reg_raw[0], reg_raw[7], reg_raw[6], reg_raw[5],
+                 reg_raw[4], reg_raw[11], reg_raw[10], reg_raw[9]]
+    registration = _decode_iso5(bytes(reg_chars[:min(reg_len, 9)]))
 
-    # 航班号 + 机场 (20 字节: String_Length(2) + flight_no(8) + dep(4) + dest(4))
+    # 航班号 + 机场 (20 字节, 倒序交错: 见 _encode_flight_airport)
     fa = buf[OFFSET_FLIGHT_AIRPORT:OFFSET_FLIGHT_AIRPORT + 20]
-    flg_len = int.from_bytes(fa[0:2], "big")
-    flight_number = _decode_iso5(fa[2:2 + min(flg_len, 8)])
-    departure_airport = _decode_iso5(fa[10:14])
-    destination_airport = _decode_iso5(fa[14:18])
+    flg_len = int.from_bytes(fa[2:4], "big")
+    fn = [fa[1], fa[0], fa[7], fa[6], fa[5], fa[4], fa[11], fa[10]]
+    flight_number = _decode_iso5(bytes(fn[:min(flg_len, 8)]))
+    departure_airport = _decode_iso5(bytes([fa[13], fa[12], fa[19], fa[18]]))
+    destination_airport = _decode_iso5(bytes([fa[9], fa[8], fa[15], fa[14]]))
 
     return {
         "flight_phase": flight_phase,

@@ -7,12 +7,12 @@
 
 覆盖场景:
     1. 消息字段完整性: 9个字段 (航段/阶段/UTC日期时间/ICAO/注册号/航班号/机场/终止标志)
-    2. 初始阶段判定: 地/空速0/维护正常 → Pre-Flight(2)
-    3. 起飞滑跑/离地: 油门>阈值/空速>离地速度 → Phase 5/6, 航段递增
-    4. 爬升/巡航/下降/进近: 高度+高度变化率 → Phase 7/8/9/10
-    5. 维护模式: 维护开关=ground_test → Phase 14, 终止标志 False
+    2. 初始阶段判定: 地/空速0/维护正常 → power_on(1)
+    3. 起飞滑跑/初始爬升: 油门>阈值/空地=air+空速>离地速度 → Phase 4/5, 航段递增
+    4. 爬升/巡航/下降/进近: 高度+高度变化率 → Phase 6/7/8/9
+    5. 维护模式: 维护开关=ground_test → Phase 15, 终止标志 False
     6. 双源切换: 左源失效 → 切右源
-    7. 双源都失效 → Phase 15 未知
+    7. 双源都失效 → 保持上一阶段
 """
 import json
 import time
@@ -78,52 +78,54 @@ def main():
     set_signal("left", "flight_altitude", 0.0)
     set_signal("left", "fcm_corrected_altitude_rate", 0.0)
     m = get_msg()
-    ok = m["flight_phase"] in (1, 2)
+    ok = m["flight_phase"] == 1
     results.append(assert_cond(ok, f"初始阶段: {m['phase_name']}({m['flight_phase']})"))
 
-    # 3. 起飞滑跑 + 离地
-    print("\n[3] 起飞滑跑/离地 (航段递增)")
+    # 3. 起飞滑跑 + 初始爬升
+    print("\n[3] 起飞滑跑/初始爬升 (航段递增)")
     set_signal("left", "brake_status", "released")
     set_signal("left", "engine_thrust_lever_angle", 50.0)
     set_signal("left", "airspeed", 100.0)
     set_signal("left", "ground_speed", 50.0)
     m = get_msg()
-    ok = m["flight_phase"] == 5
+    ok = m["flight_phase"] == 4
     results.append(assert_cond(ok, f"起飞滑跑: {m['phase_name']}({m['flight_phase']}) 航段={m['flight_leg']}"))
     leg_before = m["flight_leg"]
+    # 初始爬升: 空地=air + 空速>离地速度 + 高度变化率>0
+    set_signal("left", "air_ground_status", "air")
     set_signal("left", "airspeed", 150.0)
+    set_signal("left", "fcm_corrected_altitude_rate", 1000.0)
     m = get_msg()
-    ok = m["flight_phase"] == 6 and m["flight_leg"] >= leg_before
-    results.append(assert_cond(ok, f"离地: {m['phase_name']}({m['flight_phase']}) 航段={m['flight_leg']}"))
+    ok = m["flight_phase"] == 5 and m["flight_leg"] >= leg_before
+    results.append(assert_cond(ok, f"初始爬升: {m['phase_name']}({m['flight_phase']}) 航段={m['flight_leg']}"))
 
     # 4. 爬升/巡航/下降/进近
     print("\n[4] 爬升/巡航/下降/进近")
-    set_signal("left", "air_ground_status", "air")
     set_signal("left", "flight_altitude", 10000.0)
     set_signal("left", "fcm_corrected_altitude_rate", 500.0)
     m = get_msg()
-    results.append(assert_cond(m["flight_phase"] == 7, f"爬升: {m['phase_name']}({m['flight_phase']})"))
+    results.append(assert_cond(m["flight_phase"] == 6, f"爬升: {m['phase_name']}({m['flight_phase']})"))
 
     set_signal("left", "flight_altitude", 30000.0)
     set_signal("left", "fcm_corrected_altitude_rate", 0.0)
     m = get_msg()
-    results.append(assert_cond(m["flight_phase"] == 8, f"巡航: {m['phase_name']}({m['flight_phase']})"))
+    results.append(assert_cond(m["flight_phase"] == 7, f"巡航: {m['phase_name']}({m['flight_phase']})"))
 
     set_signal("left", "flight_altitude", 20000.0)
     set_signal("left", "fcm_corrected_altitude_rate", -500.0)
     m = get_msg()
-    results.append(assert_cond(m["flight_phase"] == 9, f"下降: {m['phase_name']}({m['flight_phase']})"))
+    results.append(assert_cond(m["flight_phase"] == 8, f"下降: {m['phase_name']}({m['flight_phase']})"))
 
     set_signal("left", "flight_altitude", 6000.0)
     set_signal("left", "fcm_corrected_altitude_rate", -400.0)
     m = get_msg()
-    results.append(assert_cond(m["flight_phase"] == 10, f"进近: {m['phase_name']}({m['flight_phase']})"))
+    results.append(assert_cond(m["flight_phase"] == 9, f"进近: {m['phase_name']}({m['flight_phase']})"))
 
     # 5. 维护模式
-    print("\n[5] 维护模式 (Phase 14, 终止标志 False)")
+    print("\n[5] 维护模式 (Phase 15, 终止标志 False)")
     set_signal("left", "maintenance_switch_position", "ground_test")
     m = get_msg()
-    ok = m["flight_phase"] == 14 and m["global_abort_flag"] is False
+    ok = m["flight_phase"] == 15 and m["global_abort_flag"] is False
     results.append(assert_cond(ok, f"维护: {m['phase_name']}({m['flight_phase']}) 终止={m['global_abort_flag']}"))
 
     # 6. 双源切换
@@ -138,15 +140,15 @@ def main():
     ok = d["active_source"] == "right" and m["airspeed"] == 150.0
     results.append(assert_cond(ok, f"双源切换: 生效源={d['active_source']} 空速={m['airspeed']}"))
 
-    # 7. 双源都失效 → Phase 15
-    print("\n[7] 双源都失效 (Phase 15 未知)")
+    # 7. 双源都失效 → 保持上一阶段
+    print("\n[7] 双源都失效 (保持上一阶段)")
     set_signal("left", "air_ground_status", "air", valid=False)
     set_signal("right", "air_ground_status", "air", valid=False)
     set_signal("left", "airspeed", 150.0, valid=False)
     set_signal("right", "airspeed", 150.0, valid=False)
     m = get_msg()
-    ok = m["flight_phase"] == 15
-    results.append(assert_cond(ok, f"双源失效: {m['phase_name']}({m['flight_phase']})"))
+    ok = m["flight_phase"] == 9
+    results.append(assert_cond(ok, f"双源失效保持: {m['phase_name']}({m['flight_phase']})"))
 
     # 汇总
     print("\n" + "=" * 60)
