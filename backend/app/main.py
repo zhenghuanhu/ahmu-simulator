@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
 
     # 5. 启动业务服务
     from app.services.fault_diagnosis import fault_service
+    from app.services.fault_history import fault_history_service
     from app.services.param_monitor import param_service
     from app.services.config_management import config_service
     from app.services.startup_test import startup_test_service
@@ -73,6 +74,7 @@ async def lifespan(app: FastAPI):
     from app.services.comm_security import comm_security_service
 
     await fault_service.start()
+    await fault_history_service.start()
     await param_service.start()
     # 启动 AFDX/A664 参数监控接收通道 (UDP 监听 + ICD 信号解码)
     from app.services.afdx_receiver import afdx_receiver
@@ -108,6 +110,7 @@ async def lifespan(app: FastAPI):
     logger.info("AHMU 仿真器关闭中...")
 
     await fault_service.stop()
+    await fault_history_service.stop()
     await param_service.stop()
     from app.services.afdx_receiver import afdx_receiver
     afdx_receiver.stop()

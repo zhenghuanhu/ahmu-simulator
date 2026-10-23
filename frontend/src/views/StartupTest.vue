@@ -39,9 +39,19 @@
         </div>
       </div>
 
-      <!-- ACK按钮 -->
-      <div v-if="activeTest.state === 'waiting_ack'" style="margin-top: 16px; text-align: center;">
-        <el-button type="primary" size="large" @click="sendAck">发送 ACK 确认</el-button>
+      <!-- 交互页面展示提示 -->
+      <el-alert v-if="activeTest.state === 'display_page'" type="info" :closable="false"
+                style="margin-top: 16px;" title="成员系统请求展示交互式测试页面"
+                description="OHMS 已向维护人员展示交互式测试页面, 请执行页面要求的操作后提交响应。" />
+
+      <!-- 维护人员响应按钮 (交互式) -->
+      <div v-if="activeTest.state === 'waiting_user'" style="margin-top: 16px; text-align: center;">
+        <el-button type="primary" size="large" @click="sendAck">提交交互响应 (继续测试)</el-button>
+      </div>
+
+      <!-- 终止按钮 -->
+      <div v-if="isActive" style="margin-top: 16px; text-align: center;">
+        <el-button type="danger" size="small" @click="terminateTest">终止测试</el-button>
       </div>
     </el-card>
 
@@ -77,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useWebSocket } from '../composables/useWebSocket'
 
@@ -89,7 +99,8 @@ const tests = ref([])
 const loading = ref(false)
 const activeTest = ref(null)
 const testSteps = ref([])
-const stateFlow = ['command_received', 'in_progress', 'waiting_ack', 'completed']
+const stateFlow = ['command_received', 'in_progress', 'display_page', 'waiting_user', 'completed']
+let pollTimer = null
 
 const api = (path) => {
   const port = window.location.port === '5173' ? '8443' : window.location.port
@@ -124,10 +135,27 @@ const sendAck = () => {
     .then(r => r.json())
     .then(data => {
       if (data.status === 'ok') {
-        ElMessage.success('ACK已发送')
+        ElMessage.success('交互响应已提交')
       } else {
-        ElMessage.warning(data.message || 'ACK失败')
+        ElMessage.warning(data.message || '提交失败')
       }
+      fetchTests()
+    })
+}
+
+const terminateTest = () => {
+  if (!activeTest.value) return
+  fetch(api(`/api/v1/groundtest/${activeTest.value.test_id}/terminate`), { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        ElMessage.success('终止指令已发送')
+      } else {
+        ElMessage.warning(data.message || '终止失败')
+      }
+      // 无论结果如何都刷新 (终止/已结束均会改变记录状态)
+      fetchTests()
+      activeTest.value = null
     })
 }
 
@@ -142,10 +170,10 @@ const fetchTests = () => {
 }
 
 const stateType = (s) => ({
-  'warning': s === 'waiting_ack',
+  'warning': s === 'waiting_user' || s === 'display_page',
   'success': s === 'completed',
-  'danger': s === 'aborted' || s === 'suppressed',
-  'info': s === 'in_progress',
+  'danger': s === 'aborted' || s === 'suppressed' || s === 'terminated',
+  'info': s === 'in_progress' || s === 'command_received',
 }[s] || 'info')
 
 const isStateActive = (s) => activeTest.value?.state === s
@@ -155,20 +183,25 @@ const isStatePassed = (s) => {
   return current > order
 }
 
+// 是否处于可终止的活跃状态
+const isActive = () => activeTest.value && ['command_received', 'in_progress', 'display_page', 'waiting_user'].includes(activeTest.value.state)
+
 const stateText = (s) => ({
-  command_received: '指令接收',
-  in_progress: '测试进行',
-  waiting_ack: '等待ACK',
+  command_received: '指令已发送',
+  in_progress: '测试进行中',
+  display_page: '交互页面展示',
+  waiting_user: '等待维护人员响应',
   completed: '已完成',
   suppressed: '被抑制',
+  terminated: '已终止',
   aborted: '已中止',
 }[s] || s)
 
 const statusClass = (s) => ({
   'ohms-green': s === 'completed',
-  'ohms-red': s === 'aborted' || s === 'suppressed',
-  'ohms-yellow': s === 'waiting_ack',
-  'ohms-cyan': s === 'in_progress',
+  'ohms-red': s === 'aborted' || s === 'suppressed' || s === 'terminated',
+  'ohms-yellow': s === 'waiting_user' || s === 'display_page',
+  'ohms-cyan': s === 'in_progress' || s === 'command_received',
 })
 
 const statusText = stateText
@@ -204,13 +237,21 @@ onMounted(() => {
     }
   })
 
-  on('test_completed', () => {
-    setTimeout(() => {
+  on('test_completed', (data) => {
+    // 测试结束: 立即刷新记录, 清空活跃测试
+    if (activeTest.value?.test_id === data.test_id) {
       activeTest.value = null
       testSteps.value = []
-      fetchTests()
-    }, 3000)
+    }
+    fetchTests()
   })
+
+  // 定时轮询刷新 (兜底: 即使 WebSocket 事件丢失也能保持列表/状态一致)
+  pollTimer = setInterval(fetchTests, 2000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 

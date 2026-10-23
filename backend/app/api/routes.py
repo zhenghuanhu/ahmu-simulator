@@ -14,6 +14,7 @@ from loguru import logger
 from app.database import get_db, ICDEntry
 from app.core.websocket_manager import ws_manager
 from app.services.fault_diagnosis import fault_service
+from app.services.fault_history import fault_history_service
 from app.services.param_monitor import param_service
 from app.services.config_management import config_service
 from app.services.startup_test import startup_test_service
@@ -214,6 +215,36 @@ async def get_fault_history(
 ):
     """历史故障查询 (按航段)"""
     return {"segment": segment, "items": fault_service.get_fault_history(db, segment)}
+
+
+# ==================== 故障历史检索 (启动测试服务 / 199 成员) ====================
+# 对齐 OHMS test_case/200NVM.py 的故障历史检索(FHRetrieval)流程
+
+@router.post("/FHATAsRequest")
+async def fh_atas_request():
+    """获取 ATA 编号列表 (故障历史检索步骤 1)"""
+    return fault_history_service.get_fh_atas()
+
+
+@router.post("/FHEquipRequest")
+async def fh_equip_request(payload: Optional[dict] = None):
+    """获取成员系统设备列表 (可按 ATA 过滤, 故障历史检索步骤 2)"""
+    ata = (payload or {}).get("ata")
+    return fault_history_service.get_fh_equips(ata)
+
+
+@router.post("/FHRetrievalRequest")
+async def fh_retrieval_request(payload: Optional[dict] = None):
+    """开始故障历史检索任务 (故障历史检索步骤 3)"""
+    equip_id = (payload or {}).get("equipID")
+    return await fault_history_service.start_fh_retrieval(equip_id)
+
+
+@router.post("/FHStatusRequest")
+async def fh_status_request(payload: Optional[dict] = None):
+    """查询故障历史检索任务状态 (故障历史检索步骤 4, 对齐 data[0]['fhStatusStructList'][0]['status'])"""
+    equip_id = (payload or {}).get("equipID")
+    return [fault_history_service.query_fh_status(equip_id)]
 
 
 @router.post("/fault/simulate")
@@ -531,14 +562,48 @@ async def get_afdx_status():
 
 @router.post("/groundtest/start")
 async def start_ground_test(member: str, test_type: str = "interactive"):
-    """发起启动测试"""
+    """发起启动测试 (前置条件检查 + 抑制检查 + 发运行测试指令)"""
     return await startup_test_service.start_test(member, test_type)
 
 
 @router.post("/groundtest/{test_id}/ack")
-async def send_test_ack(test_id: str):
-    """发送ACK确认"""
-    return await startup_test_service.send_ack(test_id)
+async def send_test_ack(test_id: str, response: Optional[dict] = None):
+    """维护人员对交互式测试页面的响应 (确认/提交, 触发继续测试指令)"""
+    return await startup_test_service.send_user_response(test_id, response or {})
+
+
+@router.post("/groundtest/{test_id}/response")
+async def send_test_response(test_id: str, response: Optional[dict] = None):
+    """维护人员交互页面响应 (语义化别名, 同 /ack)"""
+    return await startup_test_service.send_user_response(test_id, response or {})
+
+
+@router.post("/groundtest/{test_id}/terminate")
+async def terminate_ground_test(test_id: str):
+    """终止正在进行的启动测试 (发终止指令)"""
+    return await startup_test_service.terminate_test(test_id)
+
+
+@router.post("/groundtest/member-status")
+async def report_member_status(
+    member: str,
+    inhibited: bool = False,
+    inhibit_conditions: Optional[str] = None,
+    test_completed: bool = False,
+    fault_reports: Optional[str] = None,
+):
+    """注入成员系统状态 (模拟成员系统状态报告: 抑制条件/测试完成/故障报告)"""
+    import json as _json
+    conds = _json.loads(inhibit_conditions) if inhibit_conditions else []
+    faults = _json.loads(fault_reports) if fault_reports else []
+    return await startup_test_service.report_member_status(
+        member, inhibited, conds, test_completed, faults)
+
+
+@router.get("/groundtest/status")
+async def get_groundtest_status():
+    """获取启动测试服务状态 (活跃测试/前置条件/成员状态)"""
+    return startup_test_service.get_status()
 
 
 @router.get("/groundtest/list")

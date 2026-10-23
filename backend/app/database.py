@@ -734,3 +734,19 @@ class CommSecurityLog(Base):
     detail = Column(Text)                                         # 事件详情
     result = Column(String(20), default="success", index=True)    # success/failed/dropped
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class FaultHistoryTask(Base):
+    """故障历史检索任务表 (启动测试服务 - 199 成员启动测试)
+
+    对齐 OHMS test_case/200NVM.py 的故障历史检索(FHRetrieval)流程:
+      Start_Fault_History -> FHRetrievalRequest -> FHStatusRequest(Complete/Error)
+    支持多达 199 个成员系统并发启动故障历史检索任务。
+    """
+    __tablename__ = "fault_history_tasks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    equip_id = Column(String(50), nullable=False, index=True)  # 成员系统标识 (equipID)
+    status = Column(String(20), default="InProgress", index=True)  # InProgress/Complete/Error
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    completed_at = Column(DateTime, nullable=True)

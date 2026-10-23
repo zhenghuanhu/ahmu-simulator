@@ -256,6 +256,20 @@ DEFAULT_USER = {
 # ICD 缓存配置
 ICD_CACHE_FILE = CACHE_DIR / "icd_snapshot.msgpack"
 
+# 启动测试功能配置 (ARINC624 启动测试交互)
+# 需求: AHMU 支持按成员系统规范模拟与成员系统的启动测试交互通信, 支持维护人员
+#       经交互式页面触发成员系统执行测试; 前置条件=飞机地面 + 维护开关∈{地面测试,数据加载};
+#       指令前与执行期间监视成员抑制条件; 支持交互式/非交互式两个场景。
+# Mock 环境用 UDP 单播模拟 AFDX: AHMU 发指令到成员(send_port), 成员回响应到 AHMU(recv_port)。
+STARTUP_TEST_CONFIG = {
+    "recv_host": "0.0.0.0",      # AHMU 接收成员系统响应的监听地址
+    "recv_port": 34830,           # AHMU 接收成员系统响应端口 (成员系统发送到此处)
+    "send_port": 34831,           # AHMU 发送指令端口 (成员系统监听此处)
+    "ack_timeout_sec": 5,         # 等待成员系统响应/ACK 超时 (秒)
+    "interactive_page_timeout_sec": 60,  # 交互式页面等待维护人员响应超时 (秒)
+    "inhibit_poll_interval_sec": 1,      # 抑制条件监视轮询周期 (秒)
+}
+
 # 共享内存配置 (Windows兼容)
 SHM_CONFIG = {
     "name": "AHMU_SHM_BUFFER",
