@@ -693,6 +693,75 @@ async def get_base_config(
     return config_service.get_base_config(member, page, size)
 
 
+# ==================== ACR 飞机构型报告查询 (对齐构型信息.py/config_verify.py) ====================
+# 测试端经 configRep_lib.py 的 6 个 url_api 查询构型数据, 响应为 list 包裹 + 嵌套字段
+
+@router.post("/ACRATAsRequest")
+async def acr_atas_request(payload: Optional[dict] = None):
+    """ATA 章节列表 -> [ {acrAtaStructList: [{ata, ataName}]} ] (messageID 0x0301)"""
+    return config_service.get_acr_atas()
+
+
+@router.post("/ACREquipsRequest")
+async def acr_equips_request(payload: Optional[dict] = None):
+    """某 ATA 下设备名列表 -> [ {totalCount, equipNameList: [{equipName}]} ] (messageID 0x0302)"""
+    p = payload or {}
+    return config_service.get_acr_equips(
+        p.get("ata"), p.get("pageNumber", 1), p.get("numberPerPage", 20))
+
+
+@router.post("/ACREquipmentNameRequest")
+async def acr_equipment_name_request(payload: Optional[dict] = None):
+    """别名: 同 ACREquipsRequest (config_verify 中的历史命名)"""
+    p = payload or {}
+    return config_service.get_acr_equips(
+        p.get("ata"), p.get("pageNumber", 1), p.get("numberPerPage", 20))
+
+
+@router.post("/ACRHardInfoRequest")
+async def acr_hard_info_request(payload: Optional[dict] = None):
+    """硬件信息 -> [ {colour, state, hardPartNumber, ...} ] (messageID 0x0303)"""
+    return config_service.get_acr_hard_info((payload or {}).get("equipID"))
+
+
+@router.post("/ACRSpecificDataRequest")
+async def acr_specific_data_request(payload: Optional[dict] = None):
+    """特定数据 -> [ {specificInfoList: [{colour, specificData}]} ] (messageID 0x0304)"""
+    p = payload or {}
+    return config_service.get_acr_specific(
+        p.get("equipID"), p.get("pageNumber", 1), p.get("numberPerPage", 15))
+
+
+@router.post("/ACRSpecificInfoRequest")
+async def acr_specific_info_request(payload: Optional[dict] = None):
+    """别名: 同 ACRSpecificDataRequest"""
+    p = payload or {}
+    return config_service.get_acr_specific(
+        p.get("equipID"), p.get("pageNumber", 1), p.get("numberPerPage", 15))
+
+
+@router.post("/ACRSoftInfoRequest")
+async def acr_soft_info_request(payload: Optional[dict] = None):
+    """软件信息 -> [ {colour, softLocationID, softLocationDescription} ] (messageID 0x0305)"""
+    return config_service.get_acr_soft_info((payload or {}).get("equipID"))
+
+
+@router.post("/ACRSoftPartResponse")
+async def acr_soft_part_response(payload: Optional[dict] = None):
+    """软件部件 -> [ {acrSoftPartStructList: [{colour, softPartNumber, softPartDescription}]} ] (messageID 0x0306)"""
+    p = payload or {}
+    return config_service.get_acr_soft_part(
+        p.get("equipID"), p.get("pageNumber", 1), p.get("numberPerPage", 10))
+
+
+@router.post("/ACRSoftPartRequest")
+async def acr_soft_part_request(payload: Optional[dict] = None):
+    """别名: 同 ACRSoftPartResponse"""
+    p = payload or {}
+    return config_service.get_acr_soft_part(
+        p.get("equipID"), p.get("pageNumber", 1), p.get("numberPerPage", 10))
+
+
 # ==================== 生命周期 (成员系统生命周期数据) ====================
 
 @router.get("/lifecycle/logs")

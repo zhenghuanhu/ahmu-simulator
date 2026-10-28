@@ -183,6 +183,17 @@ AIRCRAFT_STATUS_RX_CONFIG = {
     ],
 }
 
+# 构型报告接收通道配置 (4.3.13 构型管理 - AFDX 数据链路)
+# 测试端《构型信息.py》经 AFDX 发送 Config_Report_Dataset(载荷 Configuration_report, ICD 中为 BLK 块,
+# 内部四类字段布局由 ECR 文档定义, 本地不可得); Mock 环境用 UDP 单播承载 JSON 构型报告,
+# 收到后解析四类字段(硬件/特定/软件/软件部件)入库, 与基本构型比对生成构型错误报告。
+CONFIG_REPORT_RX_CONFIG = {
+    "recv_host": "0.0.0.0",   # UDP 接收监听地址
+    "recv_port": 34840,       # AHMU 接收构型报告端口 (测试端发送到此处)
+    "acr_request_port": 34841,  # AHMU 接收 ACR 构型请求端口 (Deal_Type 1=429/2=664)
+    "vl_id": 20087,           # 构型报告虚拟链路 VL ID (来自 ICD, 供语义参考)
+}
+
 # AFDX/A664 参数监控接收通道配置 (4.3.12 参数监控 - AFDX 数据链路)
 # 真实 AFDX 经虚拟链路(VL)承载; Mock 环境用 UDP 单播模拟, 每个通道监听一个 UDP 端口,
 # 收到报文后按 ICD 消息帧定义解码为信号并推送到参数监控。

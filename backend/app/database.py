@@ -750,3 +750,29 @@ class FaultHistoryTask(Base):
     status = Column(String(20), default="InProgress", index=True)  # InProgress/Complete/Error
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     completed_at = Column(DateTime, nullable=True)
+
+
+class AcrConfigReport(Base):
+    """ACR 飞机构型报告表 (4.3.13 构型管理 - ACR 查询接口数据源)
+
+    存储经 AFDX(Mock UDP) 接收的成员系统构型报告四类字段:
+      硬件(hardPartNumber/hardPartDescription/hardSerialNumber/hardModificationStatus)
+      特定数据(specificData, JSON list)
+      软件(softLocationID/softLocationDescription)
+      软件部件(softPartNumber/softPartDescription, JSON list)
+    与基本构型比对不一致时生成 ConfigErrorReport, colour 状态据此判定(1/2/3)。
+    """
+    __tablename__ = "acr_config_reports"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    member_system = Column(String(50), nullable=False, index=True)
+    equip_id = Column(Integer, index=True)                     # 数字设备标识
+    hard_part_number = Column(String(100))                      # 硬件件号
+    hard_part_description = Column(String(200))                 # 硬件描述
+    hard_serial_number = Column(String(100))                    # 硬件序列号
+    hard_modification_status = Column(String(20))               # 硬件修改状态
+    specific_data = Column(Text)                                # 特定数据 (JSON list)
+    soft_location_id = Column(String(100))                      # 软件位置标识
+    soft_location_description = Column(String(200))             # 软件位置描述
+    soft_parts = Column(Text)                                   # 软件部件 (JSON list)
+    report_time = Column(DateTime, default=datetime.utcnow, index=True)  # 接收时间
