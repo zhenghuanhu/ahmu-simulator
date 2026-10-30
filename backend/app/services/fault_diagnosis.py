@@ -9,6 +9,7 @@
 import asyncio
 import random
 import json
+import socket
 import time
 from datetime import datetime
 from typing import Optional
@@ -21,7 +22,7 @@ from app.database import (
 )
 from app.core.websocket_manager import ws_manager
 from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
-from app.config import FAULT_DIAGNOSIS_CONFIG
+from app.config import FAULT_DIAGNOSIS_CONFIG, FAULT_RX_CONFIG
 
 # 成员系统总数 (真实48 + 虚拟补足, 满足"不少于400个成员系统")
 FAULT_MEMBER_COUNT = 400
@@ -65,6 +66,10 @@ class FaultDiagnosisService:
         # 自动上报控制 (来自 config.FAULT_DIAGNOSIS_CONFIG)
         self._auto_report_enabled = FAULT_DIAGNOSIS_CONFIG.get("auto_report_enabled", False)
         self._auto_report_probability = FAULT_DIAGNOSIS_CONFIG.get("auto_report_probability", 0.005)
+        # 故障/失效 ICD 报告 UDP 接收 (Mock AFDX)
+        self._rx_sock: Optional[socket.socket] = None
+        self._rx_host = FAULT_RX_CONFIG.get("recv_host", "0.0.0.0")
+        self._rx_port = FAULT_RX_CONFIG.get("recv_port", 34850)
 
     # ==================== 生命周期 ====================
 
@@ -73,15 +78,18 @@ class FaultDiagnosisService:
         self._build_member_catalog()
         self._build_fde_pool()
         self._build_fault_model()
+        self._setup_rx_socket()
         logger.info(f"故障诊断服务已启动 (成员系统{len(self._member_catalog)}, "
                     f"故障模型{len(self._fault_model)}, FDE{len(self._fde_pool)}, "
                     f"自动上报={'启用' if self._auto_report_enabled else '关闭'})")
         asyncio.create_task(self._receive_loop())
+        asyncio.create_task(self._fault_rx_loop())
 
     async def stop(self):
         self._running = False
         for t in self._injections.values():
             t.cancel()
+        self._close_rx_socket()
         logger.info("故障诊断服务已停止")
 
     def _build_member_catalog(self):
@@ -257,6 +265,100 @@ class FaultDiagnosisService:
             return
         f = random.choice(faults)
         await self.process_fault_report(member, f["fault_code"], f["severity"])
+
+    # ==================== ICD 故障/失效报告 UDP 接收 (Mock AFDX) ====================
+
+    def _setup_rx_socket(self):
+        """创建故障/失效 ICD 报告 UDP 接收 socket (Mock AFDX)"""
+        try:
+            self._rx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._rx_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._rx_sock.bind((self._rx_host, self._rx_port))
+            self._rx_sock.setblocking(False)
+            logger.info(f"[FaultDiagnosis] 故障/失效 ICD 报告 UDP 接收已监听: "
+                        f"{self._rx_host}:{self._rx_port}")
+        except OSError as e:
+            logger.error(f"[FaultDiagnosis] UDP socket 初始化失败: {e}")
+            self._close_rx_socket()
+
+    def _close_rx_socket(self):
+        if self._rx_sock:
+            try:
+                self._rx_sock.close()
+            except OSError:
+                pass
+        self._rx_sock = None
+
+    async def _fault_rx_loop(self):
+        """故障/失效 ICD 报告 UDP 接收循环: 解析并生成故障/失效报告"""
+        loop = asyncio.get_event_loop()
+        while self._running and self._rx_sock:
+            try:
+                data, addr = await loop.sock_recvfrom(self._rx_sock, 65535)
+                await self._handle_fault_message(data)
+            except asyncio.CancelledError:
+                break
+            except OSError:
+                await asyncio.sleep(0.5)
+
+    async def _handle_fault_message(self, data: bytes):
+        """处理故障/失效 ICD 报告 (Mock JSON): value=1 生成报告, value=0 忽略
+
+        报文语义对齐 return_dp_dict_all_val(val=0/1): val=1 表示故障/失效激活。
+        支持两种字段:
+          {member_system, fault_code, severity, value}     -> 故障报告
+          {member_system, failure_code, severity, value}   -> 失效报告
+        """
+        try:
+            msg = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            logger.warning(f"[FaultDiagnosis] 无法解析 ICD 故障报告: {data[:80]!r}")
+            return
+        if not isinstance(msg, dict):
+            return
+        value = msg.get("value", msg.get("val", 1))
+        if value in (0, "0", False):  # 故障/失效消失, 暂不处理
+            return
+        member = str(msg.get("member_system") or "").strip()
+        if not member:
+            return
+        fault_code = msg.get("fault_code")
+        failure_code = msg.get("failure_code")
+        severity = msg.get("severity", "minor")
+        if fault_code:
+            await self.process_fault_report(member, str(fault_code), str(severity))
+        elif failure_code:
+            # 直接注入失效报告 (无故障模型关联时仍记录)
+            await self.process_failure_report(member, str(failure_code), str(severity))
+
+    async def process_failure_report(self, member_system: str, failure_code: str,
+                                     severity: str = "minor") -> dict:
+        """直接处理失效报告 (ICD 失效消息, 无故障模型关联时仍入库)"""
+        seg = self._current_segment
+        db = SessionLocal()
+        try:
+            fr = FailureReport(
+                member_system=member_system,
+                failure_code=failure_code,
+                failure_text=failure_code,
+                severity=severity,
+                status="active",
+                fault_report_id=None,
+                root_fault_code=None,
+                logic_type="or",
+                lru_code=None,
+                flight_segment=seg,
+                raw_data=json.dumps({"failure_code": failure_code}),
+            )
+            db.add(fr)
+            db.commit()
+            return {"status": "ok", "failure_code": failure_code}
+        except Exception as e:
+            db.rollback()
+            logger.error(f"失效报告注入失败: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            db.close()
 
     # ==================== 核心: 故障报告处理 ====================
 
@@ -749,6 +851,125 @@ class FaultDiagnosisService:
     @property
     def total_faults(self) -> int:
         return self._total_faults
+
+    # ==================== 测试端协议对齐: getParameter 查询接口 ====================
+    # 对齐 OHMS libs/fault_diag_libs/api_libs.py 的 AhmuApi:
+    #   统一 POST /getParameter, 按 messageID 区分:
+    #     257(0x0101)=get_inbound_leg_fdes    258(0x0102)=get_existing_fdes
+    #     259(0x0103)=get_inbound_leg_failures_all  262(0x0106)=get_existing_failures
+    #     264(0x0108)=get_failure_history
+    #   响应为 list 包裹 (data.json()[0]), [0] 为 dict 含 totalCount + 列表字段。
+
+    def _failure_to_protocol(self, r, seq: int) -> dict:
+        """失效报告 -> 测试端协议字段 (对齐 fault_diag api_libs 的解析)"""
+        return {
+            "failureName": r.failure_text or r.failure_code,
+            "fimCode": r.failure_code,
+            "failureCode": r.failure_code,
+            "flightLeg": r.flight_segment,
+            "failureDataTime": r.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if r.created_at else None,
+            "failureSequence": seq,
+            "severity": r.severity,
+            "status": r.status,
+            "rootFaultCode": r.root_fault_code,
+            "logicType": r.logic_type,
+            "lruCode": r.lru_code,
+        }
+
+    def get_inbound_leg_failures_all(self) -> list:
+        """messageID 0x0103: 本航段所有失效报告 -> [{totalCount, inboundLegFailureAllStructList}]"""
+        seg = self._current_segment
+        db = SessionLocal()
+        try:
+            rows = db.query(FailureReport).filter(
+                FailureReport.flight_segment == seg
+            ).order_by(FailureReport.created_at).all()
+            items = [self._failure_to_protocol(r, i + 1) for i, r in enumerate(rows)]
+            return [{"totalCount": len(rows), "inboundLegFailureAllStructList": items}]
+        finally:
+            db.close()
+
+    def get_existing_failures(self) -> list:
+        """messageID 0x0106: 现有(激活)失效报告 -> [{totalCount, existingFailureStructList}]"""
+        db = SessionLocal()
+        try:
+            rows = db.query(FailureReport).filter(
+                FailureReport.status == "active"
+            ).order_by(FailureReport.created_at).all()
+            items = [self._failure_to_protocol(r, i + 1) for i, r in enumerate(rows)]
+            return [{"totalCount": len(rows), "existingFailureStructList": items}]
+        finally:
+            db.close()
+
+    def get_failure_history(self, min_leg: int = 1, max_leg: int = 1,
+                            ata_list: Optional[str] = None,
+                            flight_phase_list: Optional[str] = None) -> list:
+        """messageID 0x0108: 故障历史(按航段/ATA/阶段筛选) -> [{totalCount, failureHistoryStructList}]"""
+        db = SessionLocal()
+        try:
+            query = db.query(FailureReport).filter(
+                FailureReport.flight_segment >= min_leg,
+                FailureReport.flight_segment <= max_leg,
+            )
+            # ATA 筛选 (ataList 形如 "21;23;45" 或 "71:73", 按成员系统 ATA 章节过滤)
+            if ata_list:
+                atas = {x.strip() for x in ata_list.replace(":", ";").split(";") if x.strip()}
+                members = [m["code"] for m in self._member_catalog if m.get("ata") in atas]
+                if members:
+                    query = query.filter(FailureReport.member_system.in_(members))
+            rows = query.order_by(FailureReport.created_at).all()
+            items = [self._failure_to_protocol(r, i + 1) for i, r in enumerate(rows)]
+            return [{"totalCount": len(rows), "failureHistoryStructList": items}]
+        finally:
+            db.close()
+
+    @staticmethod
+    def _fde_to_protocol(fde: dict) -> dict:
+        """FDE -> 测试端协议字段"""
+        return {
+            "fdeCode": fde.get("fde_code"),
+            "fdeText": fde.get("fde_text"),
+            "fdeClass": "INFO",
+            "severity": fde.get("severity"),
+            "ataChapter": fde.get("ata_chapter"),
+        }
+
+    def get_inbound_leg_fdes(self) -> list:
+        """messageID 0x0101: 本航段活跃故障关联的 FDE -> [{totalCount, inboundLegFDEStructList}]"""
+        seg = self._current_segment
+        db = SessionLocal()
+        try:
+            codes = db.query(FaultReport.fde_code).filter(
+                FaultReport.flight_segment == seg,
+                FaultReport.status == "active",
+                FaultReport.fde_code.isnot(None),
+            ).distinct().all()
+            items = [self._fde_to_protocol(self._fde_pool[c[0]])
+                     for c in codes if c[0] in self._fde_pool]
+            return [{"totalCount": len(items), "inboundLegFDEStructList": items}]
+        finally:
+            db.close()
+
+    def get_existing_fdes(self) -> list:
+        """messageID 0x0102: 现有 FDE -> [{totalCount, existingFDEStructList}]"""
+        items = [self._fde_to_protocol(f) for f in self._fde_pool.values()]
+        return [{"totalCount": len(items), "existingFDEStructList": items}]
+
+    def get_failure_detail_fde(self, fim_code: str, flight_leg: int,
+                               failure_data_time: str, failure_sequence: int) -> list:
+        """失效报告关联 FDE 详情 -> [{detailFDEStructList:[{fdeCode,fdeText,fdeClass}]}]"""
+        db = SessionLocal()
+        try:
+            fde_codes = db.query(FaultReport.fde_code).filter(
+                FaultReport.flight_segment == flight_leg,
+                FaultReport.fde_code.isnot(None),
+            ).distinct().all()
+            items = [self._fde_to_protocol(self._fde_pool[c[0]])
+                     for c in fde_codes if c[0] in self._fde_pool]
+            return [{"detailFDEStructList": items}]
+        finally:
+            db.close()
 
 
 # 全局单例

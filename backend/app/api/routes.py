@@ -253,6 +253,39 @@ async def simulate_fault(member: str, code: str, severity: str = "minor"):
     return await fault_service.process_fault_report(member, code, severity)
 
 
+@router.post("/getParameter")
+async def get_parameter(payload: Optional[dict] = None):
+    """故障诊断统一查询接口 (对齐 OHMS fault_diag api_libs.AhmuApi)
+
+    按 messageID 分发:
+      257(0x0101)=get_inbound_leg_fdes     258(0x0102)=get_existing_fdes
+      259(0x0103)=get_inbound_leg_failures_all  262(0x0106)=get_existing_failures
+      264(0x0108)=get_failure_history
+    响应为 list 包裹 (data.json()[0]), [0] 含 totalCount + 列表字段。
+    """
+    p = payload or {}
+    message_id = p.get("messageID")
+    # 兼容十六进制字符串 (如 "0x0103")
+    if isinstance(message_id, str) and message_id.strip().lower().startswith("0x"):
+        try:
+            message_id = int(message_id.strip(), 16)
+        except ValueError:
+            pass
+    if message_id == 257:      # 0x0101 本航段 FDE
+        return fault_service.get_inbound_leg_fdes()
+    if message_id == 258:      # 0x0102 现有 FDE
+        return fault_service.get_existing_fdes()
+    if message_id == 259:      # 0x0103 本航段所有失效报告
+        return fault_service.get_inbound_leg_failures_all()
+    if message_id == 262:      # 0x0106 现有失效报告
+        return fault_service.get_existing_failures()
+    if message_id == 264:      # 0x0108 故障历史
+        return fault_service.get_failure_history(
+            min_leg=p.get("minLeg", 1), max_leg=p.get("maxLeg", 1),
+            ata_list=p.get("ataList"), flight_phase_list=p.get("flightPhaseList"))
+    return [{"totalCount": 0, "message": f"未知 messageID: {message_id}"}]
+
+
 @router.post("/fault/{fault_id}/resolve")
 async def resolve_fault(fault_id: str, db: Session = Depends(get_db)):
     """解决故障"""

@@ -62,6 +62,25 @@ FAULT_DIAGNOSIS_CONFIG = {
     "report_frequencies": [0.25, 0.5, 1.0, 2.0],
 }
 
+# 故障/失效报告 ICD 接收通道配置 (对齐 OHMS 故障与失效报告批量创建.txt)
+# 测试端经 AFDX 发送故障/失效 ICD 消息(return_dp_dict_all_val val=0/1 生成两种状态值);
+# Mock 环境用 UDP 单播承载 JSON, 收到后解析故障/失效字段, value=1 时生成报告。
+FAULT_RX_CONFIG = {
+    "recv_host": "0.0.0.0",   # UDP 接收监听地址
+    "recv_port": 34850,       # AHMU 接收故障/失效 ICD 消息端口
+}
+
+# 故障历史检索 TFTP 上传配置 (对齐 OHMS 故障历史报告获取664.py 的 TFTPServer)
+# 检索任务完成后, AHMU 作为 TFTP 客户端向测试端 TFTPServer(端口 59) 上传故障历史文件。
+# 采用标准 TFTP (RFC1350 + blksize 选项), 作为 ARINC 615A 数据加载的底层基础。
+FAULT_HISTORY_TFTP_CONFIG = {
+    "host": "127.0.0.1",   # 测试端 TFTP 服务器地址
+    "port": 59,            # TFTP 服务器端口
+    "blksize": 2048,       # 数据块大小
+    "timeout": 3.0,        # 收包超时(秒)
+    "enabled": True,       # 是否在检索完成后自动上传
+}
+
 # 发动机配平功能配置 (4.3.9 发动机配平)
 ENGINE_TRIM_CONFIG = {
     "engine_count": 4,                              # 发动机数量 (四发飞机)
