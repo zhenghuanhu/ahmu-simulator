@@ -27,6 +27,8 @@
      └────────────────────────────────────────────────────────────┘
 """
 import asyncio
+import json
+import socket
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -36,7 +38,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, EngineTrimCommand, EngineTrimData
 from app.core.websocket_manager import ws_manager
 from app.core.engine_monitor_mock import engine_monitor
-from app.config import ENGINE_TRIM_CONFIG
+from app.config import ENGINE_TRIM_CONFIG, ENGINE_TRIM_RX_CONFIG
 
 
 class TrimSource(str, Enum):
@@ -94,6 +96,11 @@ class EngineTrimService:
         # engine_trim_failure 已上报故障诊断的发动机集合 (防重复上报)
         self._failure_reported: set[int] = set()
 
+        # N1_Trim 信号 UDP 接收 (Mock AFDX, 对齐 ICD FCS/EEC -> AHMU)
+        self._rx_sock: Optional[socket.socket] = None
+        self._rx_host = ENGINE_TRIM_RX_CONFIG.get("recv_host", "0.0.0.0")
+        self._rx_port = ENGINE_TRIM_RX_CONFIG.get("recv_port", 34860)
+
     # ==================== 生命周期 ====================
 
     async def start(self):
@@ -102,16 +109,73 @@ class EngineTrimService:
         engine_monitor.set_report_period(
             ENGINE_TRIM_CONFIG["data_report_period_ms"])
         await engine_monitor.start_monitoring(self._handle_emu_report)
+        # 启动 N1_Trim 信号 UDP 接收 (Mock AFDX)
+        self._setup_rx_socket()
+        asyncio.create_task(self._rx_loop())
         logger.info("发动机配平服务已启动")
 
     async def stop(self):
         self._running = False
         await engine_monitor.stop_monitoring()
+        self._close_rx_socket()
         for task in self._active_tasks.values():
             task.cancel()
         self._active_tasks.clear()
         self._apply_futures.clear()
         logger.info("发动机配平服务已停止")
+
+    # ==================== N1_Trim 信号 UDP 接收 (Mock AFDX) ====================
+
+    def _setup_rx_socket(self):
+        """创建 UDP 接收 socket (接收 FCS/EEC 发送的 N1_Trim 信号)"""
+        try:
+            self._rx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._rx_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._rx_sock.bind((self._rx_host, self._rx_port))
+            self._rx_sock.setblocking(False)
+            logger.info(f"[EngineTrim] N1_Trim 信号 UDP 接收已监听: {self._rx_host}:{self._rx_port}")
+        except OSError as e:
+            logger.error(f"[EngineTrim] UDP socket 初始化失败: {e}")
+            self._close_rx_socket()
+
+    def _close_rx_socket(self):
+        if self._rx_sock:
+            try:
+                self._rx_sock.close()
+            except OSError:
+                pass
+            self._rx_sock = None
+
+    async def _rx_loop(self):
+        """UDP 接收循环: 接收 N1_Trim 信号并注入 EMU"""
+        loop = asyncio.get_event_loop()
+        while self._running and self._rx_sock:
+            try:
+                data, addr = await loop.sock_recvfrom(self._rx_sock, 65535)
+                self._handle_n1_trim_message(data, addr)
+            except asyncio.CancelledError:
+                break
+            except OSError:
+                await asyncio.sleep(0.5)
+
+    def _handle_n1_trim_message(self, data: bytes, addr):
+        """处理接收到的 N1_Trim 信号 (Mock JSON): 解码 ICD 信号名并注入 EMU"""
+        try:
+            msg = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            logger.warning(f"[EngineTrim] 无法解析 N1_Trim 信号: {data[:80]!r}")
+            return
+        if not isinstance(msg, dict):
+            return
+        engine_id = msg.get("engine_id")
+        if not isinstance(engine_id, int) or not (1 <= engine_id <= self._engine_count):
+            logger.warning(f"[EngineTrim] N1_Trim 信号发动机编号无效: {engine_id}")
+            return
+        signals = msg.get("signals") or msg.get("params") or {}
+        if not isinstance(signals, dict):
+            return
+        result = engine_monitor.inject_n1_trim(engine_id, signals)
+        logger.debug(f"[EngineTrim] N1_Trim 信号注入: engine={engine_id} applied={result.get('applied')}")
 
     # ==================== 配平指令接收 ====================
 

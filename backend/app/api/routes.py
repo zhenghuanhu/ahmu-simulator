@@ -1169,6 +1169,13 @@ async def get_nvm_reset_status():
     return nvm_reset_service.get_reset_status()
 
 
+@router.post("/nvm-reset/inject-response")
+async def inject_nvm_reset_response(payload: dict):
+    """注入成员系统重置响应模式 (测试用): auto/fail/timeout/success"""
+    mode = (payload or {}).get("mode", "auto")
+    return nvm_reset_service.inject_member_response(mode)
+
+
 # ==================== 数据下载管理 (4.3.14) ====================
 
 @router.post("/nvm-download/retrieve")
@@ -1240,6 +1247,13 @@ async def print_nvm_download_result(download_id: str):
 async def get_nvm_download_status():
     """查询数据下载管理功能整体状态"""
     return nvm_download_service.get_download_status()
+
+
+@router.post("/nvm-download/inject-response")
+async def inject_nvm_download_response(payload: dict):
+    """注入成员系统获取响应模式 (测试用): auto/fail/timeout/success"""
+    mode = (payload or {}).get("mode", "auto")
+    return nvm_download_service.inject_member_response(mode)
 
 
 # ==================== 飞机状态消息 (4.3.7) ====================

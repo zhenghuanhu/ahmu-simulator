@@ -39,6 +39,7 @@ from app.database import SessionLocal, NVMResetLog, NVMResetResult
 from app.core.websocket_manager import ws_manager
 from app.config import NVM_RESET_CONFIG, CONFIG_DIR
 from app.services.maintenance_mode import maintenance_service
+from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
 
 
 class ResetType(str, Enum):
@@ -76,7 +77,11 @@ class NVMResetService:
         self._reset_timeout = cfg.get("reset_timeout_sec", 10)
         self._reset_types = cfg.get("reset_types", ["full", "partial"])
         self._max_concurrent = cfg.get("max_concurrent_resets", 5)
-        self._success_prob = cfg.get("result_success_prob", 0.92)
+        self._success_prob = cfg.get("result_success_prob", 0.9)
+        self._timeout_prob = cfg.get("result_timeout_prob", 0.03)
+        self._delay_range = cfg.get("member_response_delay_range", [0.5, 3.0])
+        # 成员系统响应注入模式 (测试用): auto/fail/timeout/success
+        self._response_override = "auto"
 
         # 启用 NVM 重置服务的成员系统列表 (从配置文件读取)
         self._enabled_members: list[str] = []
@@ -283,12 +288,29 @@ class NVMResetService:
                 "timestamp": datetime.utcnow().isoformat(),
             })
 
-            # 模拟成员系统处理耗时 (500ms ~ 3s)
-            delay = random.uniform(0.5, 3.0)
-            await asyncio.sleep(min(delay, self._reset_timeout))
-
-            # 3. 生成成员系统返回结果 (Mock)
-            result = self._simulate_member_response(member_system, reset_type)
+            # 3. 等待成员系统响应 (超时则 TIMEOUT)
+            try:
+                result = await asyncio.wait_for(
+                    self._await_member_response(member_system, reset_type),
+                    timeout=self._reset_timeout)
+            except asyncio.TimeoutError:
+                result = {
+                    "result_code": "TIMEOUT", "result_message": "成员系统重置响应超时",
+                    "nvm_checksum": None,
+                    "reset_duration_ms": int(self._reset_timeout * 1000),
+                    "reset_type": reset_type,
+                }
+                self._store_result(reset_id, member_system, result)
+                self._finalize_log(log_id, ResetState.TIMEOUT, result)
+                await ws_manager.broadcast("nvm_reset_state", {
+                    "reset_id": reset_id,
+                    "member_system": member_system,
+                    "state": ResetState.TIMEOUT.value,
+                    "result_message": result["result_message"],
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+                logger.warning(f"NVM 重置超时: {reset_id} {member_system}")
+                return
 
             # 3.5 故障历史重置: 清除该成员系统的故障历史记录 (FaultReport)
             if reset_type == "fault_history" and result["result_code"] == "0":
@@ -321,24 +343,50 @@ class NVMResetService:
             self._active_tasks.pop(reset_id, None)
             self._active_members.discard(member_system)
 
+    def inject_member_response(self, mode: str = "auto") -> dict:
+        """注入成员系统响应模式 (测试用): auto/fail/timeout/success"""
+        if mode not in ("auto", "fail", "timeout", "success"):
+            return {"status": "error", "message": f"无效注入模式: {mode} (auto/fail/timeout/success)"}
+        self._response_override = mode
+        logger.info(f"NVM 重置成员系统响应注入模式: {mode}")
+        return {"status": "ok", "mode": mode}
+
+    async def _await_member_response(self, member_system: str, reset_type: str) -> dict:
+        """模拟成员系统处理重置命令并返回结果 (注入 timeout 时超过超时)"""
+        if self._response_override == "timeout":
+            # 超过 reset_timeout, 触发 wait_for 的 TimeoutError
+            await asyncio.sleep(self._reset_timeout + 5)
+        lo, hi = self._delay_range
+        delay = random.uniform(lo, hi)
+        await asyncio.sleep(min(delay, self._reset_timeout))
+        return self._simulate_member_response(member_system, reset_type)
+
     def _simulate_member_response(self, member_system: str, reset_type: str) -> dict:
-        """模拟成员系统返回的重置结果"""
+        """生成成员系统返回的重置结果 (支持注入模式 fail/success, auto 按概率)"""
         # 重置耗时 (毫秒)
         duration_ms = random.randint(120, 2800)
-        # 按配置概率决定成功/失败
-        if random.random() < self._success_prob:
-            result_code = "0"
-            # 故障历史重置与 NVM 数据重置的结果描述区分
-            if reset_type == "fault_history":
-                result_message = "故障历史数据重置成功"
-            else:
-                result_message = "NVM 数据重置成功"
-        else:
+        # 模拟重置后的 NVM 校验和 (16字节十六进制)
+        checksum = "".join(random.choice("0123456789abcdef") for _ in range(32))
+
+        if self._response_override == "fail":
             result_code = str(random.choice([1, 2, 3]))
             result_message = ("故障历史数据重置失败" if reset_type == "fault_history"
                               else "NVM 数据重置失败")
-        # 模拟重置后的 NVM 校验和 (16字节十六进制)
-        checksum = "".join(random.choice("0123456789abcdef") for _ in range(32))
+        elif self._response_override == "success":
+            result_code = "0"
+            result_message = ("故障历史数据重置成功" if reset_type == "fault_history"
+                              else "NVM 数据重置成功")
+        else:
+            # auto: 按配置概率决定成功/失败
+            if random.random() < self._success_prob:
+                result_code = "0"
+                result_message = ("故障历史数据重置成功" if reset_type == "fault_history"
+                                  else "NVM 数据重置成功")
+            else:
+                result_code = str(random.choice([1, 2, 3]))
+                result_message = ("故障历史数据重置失败" if reset_type == "fault_history"
+                                  else "NVM 数据重置失败")
+
         return {
             "result_code": result_code,
             "result_message": result_message,

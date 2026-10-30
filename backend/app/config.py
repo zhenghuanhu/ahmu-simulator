@@ -94,6 +94,15 @@ ENGINE_TRIM_CONFIG = {
     "data_report_period_ms": 200,                   # EMU 配平数据上报周期 (毫秒, 对齐 ICD N1_Trim_Applied 200ms)
 }
 
+# 发动机配平 N1_Trim 信号接收通道配置 (对齐 ICD FCS/EEC -> AHMU 方向)
+# 测试端经 AFDX 发送 N1_Trim 信号 (N1_Trim_Applied/Available/Command_Left/Right/Disable/上下限/Engine_Trim_Failure);
+# Mock 环境用 UDP 单播承载 JSON, 收到后解码 ICD 信号名并注入 EMU 配平数据。
+ENGINE_TRIM_RX_CONFIG = {
+    "recv_host": "0.0.0.0",   # UDP 接收监听地址
+    "recv_port": 34860,       # AHMU 接收 N1_Trim 信号端口 (测试端发送到此处)
+    "vl_id": 20088,           # N1_Trim 虚拟链路 VL ID (语义参考)
+}
+
 # 发动机监视装置 (EMU) Mock 配置
 ENGINE_MONITOR_CONFIG = {
     "engine_count": 4,
@@ -116,7 +125,9 @@ NVM_RESET_CONFIG = {
     # 重置类型: full/partial = NVM 数据重置; fault_history = 故障历史重置 (LRU Fault History Reset)
     "reset_types": ["full", "partial", "fault_history"],
     "max_concurrent_resets": 5,               # 最大并发重置数
-    "result_success_prob": 1.0,               # Mock 重置成功概率 (1.0=确定性成功, 保证端到端测试稳定)
+    "result_success_prob": 0.9,               # Mock 重置成功概率 (0.9=90%成功, 失败分支可达)
+    "result_timeout_prob": 0.03,              # Mock 重置超时概率 (成员系统无响应)
+    "member_response_delay_range": [0.5, 3.0],  # 成员系统响应延迟范围 (秒)
 }
 
 # 打印输出配置 (4.3.10 数据重置管理 - 打印结果输出至电子盘)
@@ -147,8 +158,9 @@ NVM_DOWNLOAD_CONFIG = {
     "data_types": ["fault_snapshot", "config_snapshot", "life_cycle"],  # NVM 数据类型
     "retrieve_timeout_sec": 15,                  # 获取超时 (秒)
     "max_concurrent_retrieves": 5,               # 最大并发获取数
-    "data_size_range": [1024, 4 * 1024 * 1024],  # NVM 数据大小范围 (字节, 1KB~4MB)
-    "retrieve_success_prob": 1.0,               # Mock 获取成功概率 (1.0=确定性成功, 保证端到端测试稳定)
+    "data_size_range": [1024, 256 * 1024],       # NVM 数据大小范围 (字节, 1KB~256KB, content 与 size 一致)
+    "retrieve_success_prob": 0.9,               # Mock 获取成功概率 (0.9=90%成功, 失败分支可达)
+    "retrieve_timeout_prob": 0.03,              # Mock 获取超时概率 (成员系统无响应)
     "progress_steps": 20,                        # 进度递增步数 (每步 ~0.1s)
 }
 

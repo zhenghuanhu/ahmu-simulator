@@ -30,6 +30,7 @@
      └─(校验失败: 非维护模式/成员系统非法/类型非法)▶ rejected
 """
 import asyncio
+import os
 import random
 from datetime import datetime
 from enum import Enum
@@ -39,8 +40,9 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, NVMData, NVMDownloadLog
 from app.core.websocket_manager import ws_manager
-from app.config import NVM_DOWNLOAD_CONFIG, SIMULATION_CONFIG
+from app.config import NVM_DOWNLOAD_CONFIG
 from app.services.maintenance_mode import maintenance_service
+from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
 
 
 class NVMDownloadState(str, Enum):
@@ -69,10 +71,12 @@ class NVMDownloadService:
         self._data_types = cfg["data_types"]
         self._retrieve_timeout = cfg.get("retrieve_timeout_sec", 15)
         self._max_concurrent = cfg.get("max_concurrent_retrieves", 5)
-        self._data_size_range = cfg.get("data_size_range", [1024, 4 * 1024 * 1024])
-        self._success_prob = cfg.get("retrieve_success_prob", 0.95)
+        self._data_size_range = cfg.get("data_size_range", [1024, 256 * 1024])
+        self._success_prob = cfg.get("retrieve_success_prob", 0.9)
+        self._timeout_prob = cfg.get("retrieve_timeout_prob", 0.03)
         self._progress_steps = cfg.get("progress_steps", 20)
-        self._member_count = SIMULATION_CONFIG.get("member_system_count", 500)
+        # 成员系统响应注入模式 (测试用): auto/fail/timeout/success
+        self._response_override = "auto"
 
         # 进行中的获取任务: download_id -> asyncio.Task
         self._active_tasks: dict[str, asyncio.Task] = {}
@@ -107,12 +111,10 @@ class NVMDownloadService:
         # 1. 维护模式校验 (仅维护模式下允许获取)
         if maintenance_service.current_mode != "maintenance":
             return f"非维护模式, 无法获取 NVM 数据 (当前模式: {maintenance_service.current_mode})"
-        # 2. 成员系统格式校验 (MEM001 ~ MEM{count})
-        if not (member_system.startswith("MEM") and member_system[3:].isdigit()):
+        # 2. 成员系统校验 (对齐 ICD 真实成员名)
+        if member_system not in MEMBER_SYSTEM_MAP:
             return f"无效的成员系统标识: {member_system}"
-        num = int(member_system[3:])
-        if num < 1 or num > self._member_count:
-            return f"成员系统 {member_system} 超出范围 (1~{self._member_count})"
+
         # 3. 数据类型校验
         if data_type not in self._data_types:
             return f"无效的数据类型: {data_type} (可选: {self._data_types})"
@@ -242,8 +244,27 @@ class NVMDownloadService:
                 })
                 await asyncio.sleep(0.1)
 
-            # 3. 生成获取结果 (Mock)
-            if random.random() < self._success_prob:
+            # 3. 等待成员系统返回 NVM 数据 (超时则 TIMEOUT)
+            try:
+                success = await asyncio.wait_for(
+                    self._await_member_data(member_system, data_type),
+                    timeout=self._retrieve_timeout)
+            except asyncio.TimeoutError:
+                self._finalize_log(log_id, NVMDownloadState.TIMEOUT, 0, None,
+                                   error="成员系统 NVM 数据获取超时")
+                await ws_manager.broadcast("nvm_download_state", {
+                    "download_id": download_id,
+                    "member_system": member_system,
+                    "state": NVMDownloadState.TIMEOUT.value,
+                    "progress": 0.0,
+                    "result_message": "NVM 数据获取超时",
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+                logger.warning(f"NVM 数据获取超时: {download_id} {member_system}")
+                return
+
+            # 4. 成功/失败
+            if success:
                 # 存储 NVM 数据到 NVMData 表
                 nvm_data_id = self._store_nvm_data(member_system, data_type, data_size)
                 self._finalize_log(log_id, NVMDownloadState.COMPLETED, data_size, nvm_data_id)
@@ -279,14 +300,38 @@ class NVMDownloadService:
 
     # ==================== 数据库操作 ====================
 
+    def inject_member_response(self, mode: str = "auto") -> dict:
+        """注入成员系统响应模式 (测试用): auto/fail/timeout/success"""
+        if mode not in ("auto", "fail", "timeout", "success"):
+            return {"status": "error", "message": f"无效注入模式: {mode} (auto/fail/timeout/success)"}
+        self._response_override = mode
+        logger.info(f"NVM 数据获取成员系统响应注入模式: {mode}")
+        return {"status": "ok", "mode": mode}
+
+    async def _await_member_data(self, member_system: str, data_type: str) -> bool:
+        """模拟成员系统返回 NVM 数据 (注入 timeout 时超过超时)"""
+        if self._response_override == "timeout":
+            # 超过 retrieve_timeout, 触发 wait_for 的 TimeoutError
+            await asyncio.sleep(self._retrieve_timeout + 5)
+        await asyncio.sleep(random.uniform(0.5, 2.0))
+        return self._simulate_retrieve_result()
+
+    def _simulate_retrieve_result(self) -> bool:
+        """生成成员系统获取结果 (支持注入模式 fail/success, auto 按概率)"""
+        if self._response_override == "fail":
+            return False
+        if self._response_override == "success":
+            return True
+        return random.random() < self._success_prob
+
     def _store_nvm_data(self, member_system: str, data_type: str,
                         data_size: int) -> Optional[str]:
         """将获取到的 NVM 数据存入 NVMData 表, 返回数据主键 id"""
         db = SessionLocal()
         nvm_data_id = None
         try:
-            # 模拟 NVM 数据内容 (随机二进制)
-            content = bytes(random.getrandbits(8) for _ in range(min(data_size, 64 * 1024)))
+            # NVM 数据内容 (随机二进制, 长度 = data_size, 保证数据大小一致)
+            content = os.urandom(data_size)
             data = NVMData(
                 member_system=member_system,
                 data_type=data_type,

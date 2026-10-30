@@ -25,6 +25,26 @@ from loguru import logger
 from app.config import ENGINE_MONITOR_CONFIG
 
 
+# ICD N1_Trim 信号名 -> (内部字段, 类型) 映射 (对齐 Member_System_all_sender_icd_v6_1_1.xml)
+#   N1_Trim_Applied      FLOAT32 -2.5~+2.5 % N1 RPM (HF_EEC_CHCLASS.A664_Msg_EEC_FCSFMS.DS16)
+#   N1_Trim_Available    DIS 0=Disable/1=Enable (FCS_Output_Data_AF20.DS17)
+#   N1_Trim_Command_Left/Right  FLOAT32 -3~+3 % N1 (FCS_Output_Data_AF20.DS4/DS5)
+#   N1_Trim_Disable      DIS 0=Not Disable/1=Disable (A664_Msg_EEC_Discrete.DS5)
+#   N1_Trim_Lower_Limit  FLOAT32 -2.5~0 (A664_Msg_EEC_FCSFMS.DS24)
+#   N1_Trim_Upper_Limit  FLOAT32 0~+2.5 (A664_Msg_EEC_FCSFMS.DS25)
+#   Engine_Trim_Failure  DIS 0=Inactive/1=Active, Fault 属性 (FCS_Output_Data_AF20.DS17)
+N1_TRIM_SIGNAL_MAP = {
+    "N1_Trim_Applied": ("n1_trim_applied", "float"),
+    "N1_Trim_Available": ("n1_trim_available", "bool"),
+    "N1_Trim_Command_Left": ("n1_trim_command_left", "float"),
+    "N1_Trim_Command_Right": ("n1_trim_command_right", "float"),
+    "N1_Trim_Disable": ("n1_trim_disable", "bool"),
+    "N1_Trim_Lower_Limit": ("n1_trim_lower_limit", "float"),
+    "N1_Trim_Upper_Limit": ("n1_trim_upper_limit", "float"),
+    "Engine_Trim_Failure": ("engine_trim_failure", "bool"),
+}
+
+
 class EngineMonitorMock:
     """发动机监视装置 Mock (全局单例)
 
@@ -202,6 +222,42 @@ class EngineMonitorMock:
         eng[cmd_key] = target_trim
         logger.info(f"[EMU] 接受配平指令: 发动机 {engine_id} ({engine_side}) -> {target_trim}% N1")
         return {"accepted": True, "message": "指令已接受, 正在执行"}
+
+    def inject_n1_trim(self, engine_id: int, signals: dict) -> dict:
+        """注入 N1_Trim 信号 (对齐 ICD FCS/EEC -> AHMU 方向), 更新 EMU 配平字段
+
+        signals: ICD 信号名 -> 值 的字典, 如
+            {"N1_Trim_Applied": 1.5, "N1_Trim_Available": 1, "N1_Trim_Disable": 0, ...}
+        返回: {"status": "ok", "engine_id": ..., "applied": {...}}
+        """
+        eng = self._engines.get(engine_id)
+        if eng is None:
+            return {"status": "error", "message": f"发动机 {engine_id} 不存在"}
+        applied = {}
+        for icd_name, (key, kind) in N1_TRIM_SIGNAL_MAP.items():
+            if icd_name not in signals:
+                continue
+            val = signals[icd_name]
+            if kind == "float":
+                try:
+                    eng[key] = float(val)
+                    applied[key] = eng[key]
+                except (TypeError, ValueError):
+                    logger.warning(f"[EMU] N1_Trim 信号 {icd_name} 值非法: {val!r}")
+            elif kind == "bool":
+                if isinstance(val, bool):
+                    eng[key] = val
+                elif val in (1, "1", "true", "True"):
+                    eng[key] = True
+                elif val in (0, "0", "false", "False"):
+                    eng[key] = False
+                else:
+                    eng[key] = bool(val)
+                applied[key] = eng[key]
+        # trim_value 同步 n1_trim_applied (兼容字段)
+        if "n1_trim_applied" in applied:
+            eng["trim_value"] = eng["n1_trim_applied"]
+        return {"status": "ok", "engine_id": engine_id, "applied": applied}
 
     # ---------------- 数据查询 ----------------
 
