@@ -77,6 +77,7 @@ class EngineTrimService:
         self._engine_count = cfg["engine_count"]
         self._trim_range = cfg["trim_range"]
         self._trim_types = cfg["trim_types"]
+        self._engine_sides = cfg.get("engine_sides", ["left", "right"])
         self._command_sources = cfg["command_sources"]
         self._ack_timeout = cfg["ack_timeout_sec"]
         self._trim_apply_timeout = cfg.get("trim_apply_timeout_sec", 30)
@@ -90,6 +91,8 @@ class EngineTrimService:
         self._apply_futures: dict[str, tuple[int, asyncio.Future]] = {}
         # 指令序号 (用于生成业务指令号)
         self._cmd_seq = 0
+        # engine_trim_failure 已上报故障诊断的发动机集合 (防重复上报)
+        self._failure_reported: set[int] = set()
 
     # ==================== 生命周期 ====================
 
@@ -118,8 +121,9 @@ class EngineTrimService:
         入参 payload 结构:
           {
             "engine_id": int,        # 发动机编号 (1~4)
-            "trim_type": str,        # thrust/power/fuel_flow
-            "target_trim": float,    # 目标配平值 (%)
+            "trim_type": str,        # n1 (N1 转速配平)
+            "engine_side": str,      # left/right (配平通道, 可选, 默认 left)
+            "target_trim": float,    # 目标配平值 (% N1)
             "source": str,           # ground/cockpit/pmat
             "source_terminal": str,  # 来源终端标识 (可选)
             "operator": str,         # 操作员 (可选)
@@ -129,12 +133,13 @@ class EngineTrimService:
           {"status": "error", "message": ...}
         """
         engine_id = payload.get("engine_id")
-        trim_type = payload.get("trim_type", "thrust")
+        trim_type = payload.get("trim_type", "n1")
+        engine_side = payload.get("engine_side", "left")
         target_trim = payload.get("target_trim")
         source = payload.get("source")
 
         # 1. 数据校验
-        valid, err = self._validate_command(engine_id, trim_type, target_trim, source)
+        valid, err = self._validate_command(engine_id, trim_type, target_trim, source, engine_side)
         if not valid:
             return {"status": "error", "message": err}
 
@@ -151,6 +156,7 @@ class EngineTrimService:
                 command_id=command_id,
                 engine_id=engine_id,
                 trim_type=trim_type,
+                engine_side=engine_side,
                 target_trim=target_trim,
                 source=source,
                 source_terminal=payload.get("source_terminal", ""),
@@ -168,13 +174,14 @@ class EngineTrimService:
 
         # 4. 异步执行状态机
         task = asyncio.create_task(
-            self._process_command(command_id, engine_id, trim_type, target_trim, source))
+            self._process_command(command_id, engine_id, trim_type, target_trim, source, engine_side))
         self._active_tasks[command_id] = task
 
         await ws_manager.broadcast("engine_trim_command_received", {
             "command_id": command_id,
             "engine_id": engine_id,
             "trim_type": trim_type,
+            "engine_side": engine_side,
             "target_trim": target_trim,
             "source": source,
             "timestamp": datetime.utcnow().isoformat(),
@@ -185,7 +192,8 @@ class EngineTrimService:
 
     # ==================== 数据校验 ====================
 
-    def _validate_command(self, engine_id, trim_type, target_trim, source) -> tuple[bool, str]:
+    def _validate_command(self, engine_id, trim_type, target_trim, source,
+                          engine_side: str = "left") -> tuple[bool, str]:
         """校验配平指令合法性, 返回 (是否通过, 错误信息)"""
         if not isinstance(engine_id, int) or not (1 <= engine_id <= self._engine_count):
             return False, f"发动机编号无效: {engine_id} (应为 1~{self._engine_count})"
@@ -193,11 +201,19 @@ class EngineTrimService:
         if trim_type not in self._trim_types:
             return False, f"配平类型无效: {trim_type} (应为 {self._trim_types})"
 
+        if engine_side not in self._engine_sides:
+            return False, f"配平通道无效: {engine_side} (应为 {self._engine_sides})"
+
         if target_trim is None or not isinstance(target_trim, (int, float)):
             return False, "目标配平值缺失或类型错误"
+        # 动态上下限: 优先采用 EMU 采集的 N1_Trim_Lower/Upper_Limit, 缺省回退配置范围
         lo, hi = self._trim_range
+        emu = engine_monitor.get_engine_data(engine_id)
+        if emu:
+            lo = emu.get("n1_trim_lower_limit", lo)
+            hi = emu.get("n1_trim_upper_limit", hi)
         if not (lo <= float(target_trim) <= hi):
-            return False, f"目标配平值越界: {target_trim} (范围 {lo}~{hi}%)"
+            return False, f"目标配平值越界: {target_trim} (范围 {lo}~{hi}% N1)"
 
         if source not in self._command_sources:
             return False, f"指令来源无效: {source} (应为 {self._command_sources})"
@@ -228,7 +244,7 @@ class EngineTrimService:
     # ==================== 指令状态机 ====================
 
     async def _process_command(self, command_id, engine_id, trim_type,
-                               target_trim, source):
+                               target_trim, source, engine_side: str = "left"):
         """执行配平指令状态机"""
         try:
             # validating
@@ -238,7 +254,7 @@ class EngineTrimService:
             # sending -> 通过 ARINC 总线下发指令到 EMU
             await self._update_status(command_id, TrimCommandState.SENDING)
             await asyncio.sleep(0.3)  # 模拟 ARINC 消息发送
-            emu_result = engine_monitor.apply_trim(engine_id, float(target_trim))
+            emu_result = engine_monitor.apply_trim(engine_id, float(target_trim), engine_side)
 
             if not emu_result["accepted"]:
                 # EMU 拒绝指令
@@ -389,6 +405,15 @@ class EngineTrimService:
                 egt=data.get("egt"),
                 fuel_flow=data.get("fuel_flow"),
                 thrust_rating=data.get("thrust_rating"),
+                # N1 配平信号 (对齐 ICD N1_Trim)
+                n1_trim_applied=data.get("n1_trim_applied"),
+                n1_trim_available=data.get("n1_trim_available"),
+                n1_trim_command_left=data.get("n1_trim_command_left"),
+                n1_trim_command_right=data.get("n1_trim_command_right"),
+                n1_trim_disable=data.get("n1_trim_disable"),
+                n1_trim_lower_limit=data.get("n1_trim_lower_limit"),
+                n1_trim_upper_limit=data.get("n1_trim_upper_limit"),
+                engine_trim_failure=data.get("engine_trim_failure"),
                 trim_value=data.get("trim_value"),
                 trim_target=data.get("trim_target"),
                 trim_status=data.get("trim_status"),
@@ -411,12 +436,25 @@ class EngineTrimService:
             "egt": data.get("egt"),
             "fuel_flow": data.get("fuel_flow"),
             "thrust_rating": data.get("thrust_rating"),
+            "n1_trim_applied": data.get("n1_trim_applied"),
+            "n1_trim_available": data.get("n1_trim_available"),
+            "n1_trim_command_left": data.get("n1_trim_command_left"),
+            "n1_trim_command_right": data.get("n1_trim_command_right"),
+            "n1_trim_disable": data.get("n1_trim_disable"),
+            "n1_trim_lower_limit": data.get("n1_trim_lower_limit"),
+            "n1_trim_upper_limit": data.get("n1_trim_upper_limit"),
+            "engine_trim_failure": data.get("engine_trim_failure"),
             "trim_value": data.get("trim_value"),
             "trim_target": data.get("trim_target"),
             "trim_status": data.get("trim_status"),
             "validity": data.get("validity"),
             "timestamp": data.get("timestamp"),
         })
+
+        # 3.5 Engine_Trim_Failure 接入故障诊断 (Active 时上报一次)
+        if data.get("engine_trim_failure") and engine_id not in self._failure_reported:
+            self._failure_reported.add(engine_id)
+            await self._report_trim_failure(engine_id)
 
         # 4. 配平到位时, 触发该发动机等待中的指令完成
         if data.get("trim_status") == "applied":
@@ -427,6 +465,23 @@ class EngineTrimService:
         for command_id, (eid, fut) in list(self._apply_futures.items()):
             if eid == engine_id and not fut.done():
                 fut.set_result(True)
+
+    async def _report_trim_failure(self, engine_id: int):
+        """Engine_Trim_Failure 接入故障诊断 (对齐 ICD Fault 属性)"""
+        try:
+            from app.services.fault_diagnosis import fault_service
+            result = await fault_service.process_fault_report(
+                "HF_FCM_1", "HF_FCM_1-001", "major")
+            logger.warning(
+                f"[EngineTrim] 发动机 {engine_id} 配平故障 (Engine_Trim_Failure=Active), "
+                f"已上报故障诊断: {result.get('status')}")
+        except Exception as e:
+            logger.error(f"[EngineTrim] 配平故障上报失败: {e}")
+        await ws_manager.broadcast("engine_trim_failure", {
+            "engine_id": engine_id,
+            "message": "发动机配平故障 (Engine_Trim_Failure=Active)",
+            "timestamp": datetime.utcnow().isoformat(),
+        })
 
     # ==================== 查询接口 ====================
 
@@ -448,6 +503,7 @@ class EngineTrimService:
                 "command_id": c.command_id,
                 "engine_id": c.engine_id,
                 "trim_type": c.trim_type,
+                "engine_side": c.engine_side,
                 "target_trim": c.target_trim,
                 "source": c.source,
                 "source_terminal": c.source_terminal,

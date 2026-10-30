@@ -84,13 +84,14 @@ FAULT_HISTORY_TFTP_CONFIG = {
 # 发动机配平功能配置 (4.3.9 发动机配平)
 ENGINE_TRIM_CONFIG = {
     "engine_count": 4,                              # 发动机数量 (四发飞机)
-    "trim_range": [-5.0, 5.0],                      # 配平值范围 (%)
-    "trim_types": ["thrust", "power", "fuel_flow"], # 配平类型: 推力/功率/燃油流量
+    "trim_range": [-2.5, 2.5],                      # 配平值范围 (% N1 RPM, 对齐 ICD N1_Trim_Applied FuncRng -2.5~+2.5)
+    "trim_types": ["n1"],                           # 配平类型: N1 转速配平 (对齐 ICD N1_Trim)
+    "engine_sides": ["left", "right"],              # 配平通道: 左/右 (对齐 ICD N1_Trim_Command_Left/Right)
     "command_sources": ["ground", "cockpit", "pmat"],  # 指令来源: 地面HMI/驾驶舱/PMAT
     "ack_timeout_sec": 5,                           # EMU 指令接受确认超时 (秒)
     "trim_apply_timeout_sec": 30,                   # 配平执行到位超时 (EMU 从接受到 applied 最长时间)
     "max_concurrent_per_engine": 1,                 # 每台发动机最大并发配平指令数
-    "data_report_period_ms": 1000,                  # EMU 配平数据上报周期 (毫秒)
+    "data_report_period_ms": 200,                   # EMU 配平数据上报周期 (毫秒, 对齐 ICD N1_Trim_Applied 200ms)
 }
 
 # 发动机监视装置 (EMU) Mock 配置

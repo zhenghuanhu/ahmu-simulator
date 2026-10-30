@@ -63,8 +63,18 @@ class EngineMonitorMock:
             "egt": round(random.uniform(600.0, 850.0), 1),
             "fuel_flow": round(random.uniform(1500.0, 3500.0), 1),
             "thrust_rating": round(random.uniform(60.0, 95.0), 2),
-            "trim_value": 0.0,          # 当前配平值
-            "trim_target": None,         # 目标配平值 (无指令时为 None)
+            # ---- N1 配平信号 (对齐 ICD N1_Trim) ----
+            "n1_trim_applied": 0.0,       # N1_Trim_Applied (FLOAT, -2.5~+2.5 % N1 RPM)
+            "n1_trim_available": True,    # N1_Trim_Available (DIS: 0=Disable / 1=Enable)
+            "n1_trim_command_left": 0.0,  # N1_Trim_Command_Left (FLOAT, -3~+3 % N1)
+            "n1_trim_command_right": 0.0, # N1_Trim_Command_Right (FLOAT, -3~+3 % N1)
+            "n1_trim_disable": False,     # N1_Trim_Disable (DIS: 1=Disable)
+            "n1_trim_lower_limit": -2.5,  # N1_Trim_Lower_Limit (FLOAT, -2.5~0)
+            "n1_trim_upper_limit": 2.5,   # N1_Trim_Upper_Limit (FLOAT, 0~+2.5)
+            "engine_trim_failure": False, # Engine_Trim_Failure (DIS: 1=Active, OHMS Fault 属性)
+            # ---- 内部配平状态机 (兼容字段) ----
+            "trim_value": 0.0,            # 当前配平值 (= n1_trim_applied)
+            "trim_target": None,          # 目标配平值 (无指令时为 None)
             "trim_status": "monitoring",  # monitoring/applying/applied
             "validity": "valid",
         }
@@ -124,16 +134,24 @@ class EngineMonitorMock:
         eng["fuel_flow"] = self._clamp(
             round(eng["fuel_flow"] + random.uniform(-20.0, 20.0), 1), self._ff_range)
 
-        # 配平执行: 当前值向目标值逐步逼近
+        # 配平执行: N1 配平值向目标值逐步逼近 (对齐 N1_Trim_Applied)
         if eng["trim_target"] is not None:
             eng["trim_status"] = "applying"
-            step = 0.3  # 每周期逼近步长 (%)
-            diff = eng["trim_target"] - eng["trim_value"]
+            step = 0.3  # 每周期逼近步长 (% N1)
+            diff = eng["trim_target"] - eng["n1_trim_applied"]
             if abs(diff) <= step:
-                eng["trim_value"] = eng["trim_target"]
+                eng["n1_trim_applied"] = eng["trim_target"]
                 eng["trim_status"] = "applied"
             else:
-                eng["trim_value"] = round(eng["trim_value"] + (step if diff > 0 else -step), 2)
+                eng["n1_trim_applied"] = round(
+                    eng["n1_trim_applied"] + (step if diff > 0 else -step), 2)
+
+            # n1_trim_applied 收敛到上下限内 (对齐 N1_Trim_Lower/Upper_Limit)
+            eng["n1_trim_applied"] = max(
+                eng["n1_trim_lower_limit"],
+                min(eng["n1_trim_upper_limit"], eng["n1_trim_applied"]))
+            # 兼容字段 trim_value = n1_trim_applied
+            eng["trim_value"] = eng["n1_trim_applied"]
 
             # 配平影响推力额定
             eng["thrust_rating"] = self._clamp(
@@ -149,22 +167,40 @@ class EngineMonitorMock:
 
     # ---------------- 配平指令执行 ----------------
 
-    def apply_trim(self, engine_id: int, target_trim: float) -> dict:
+    def apply_trim(self, engine_id: int, target_trim: float,
+                   engine_side: str = "left") -> dict:
         """下发配平指令, EMU 接受后模拟执行 (返回确认结果)
 
+        前置条件检查 (对齐 ICD N1_Trim 信号):
+          - N1_Trim_Available (配平可用)
+          - N1_Trim_Disable (配平禁止)
+          - Engine_Trim_Failure (配平故障)
         返回: {"accepted": bool, "message": str}
         """
         eng = self._engines.get(engine_id)
         if eng is None:
             return {"accepted": False, "message": f"发动机 {engine_id} 不存在"}
 
-        # 模拟 EMU 拒绝概率 (数据失效或忙时拒绝)
+        # 前置条件: 配平可用
+        if not eng.get("n1_trim_available", True):
+            return {"accepted": False, "message": "N1 配平不可用 (N1_Trim_Available=Disable)"}
+        # 前置条件: 配平禁止
+        if eng.get("n1_trim_disable", False):
+            return {"accepted": False, "message": "N1 配平被禁止 (N1_Trim_Disable=1)"}
+        # 前置条件: 配平故障
+        if eng.get("engine_trim_failure", False):
+            return {"accepted": False, "message": "发动机配平故障 (Engine_Trim_Failure=Active)"}
+
+        # 模拟 EMU 拒绝概率 (数据失效时拒绝)
         if eng["validity"] == "unavailable" and random.random() < 0.5:
             return {"accepted": False, "message": "EMU 数据失效, 拒绝配平指令"}
 
         eng["trim_target"] = target_trim
         eng["trim_status"] = "applying"
-        logger.info(f"[EMU] 接受配平指令: 发动机 {engine_id} -> {target_trim}%")
+        # 设置对应通道的 N1 配平指令 (对齐 N1_Trim_Command_Left/Right)
+        cmd_key = "n1_trim_command_right" if engine_side == "right" else "n1_trim_command_left"
+        eng[cmd_key] = target_trim
+        logger.info(f"[EMU] 接受配平指令: 发动机 {engine_id} ({engine_side}) -> {target_trim}% N1")
         return {"accepted": True, "message": "指令已接受, 正在执行"}
 
     # ---------------- 数据查询 ----------------

@@ -569,8 +569,9 @@ class EngineTrimCommand(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     command_id = Column(String(50), nullable=False, index=True)   # 业务指令号 (如 TRIM-20260816-0001)
     engine_id = Column(Integer, nullable=False, index=True)       # 发动机编号 (1~4)
-    trim_type = Column(String(30), default="thrust")              # thrust/power/fuel_flow
-    target_trim = Column(Float, nullable=False)                   # 目标配平值 (%)
+    trim_type = Column(String(30), default="n1")                  # n1 (N1 转速配平, 对齐 ICD N1_Trim)
+    engine_side = Column(String(10), default="left")              # left/right (对齐 N1_Trim_Command_Left/Right)
+    target_trim = Column(Float, nullable=False)                   # 目标配平值 (% N1)
     source = Column(String(20), nullable=False, index=True)       # ground/cockpit/pmat
     source_terminal = Column(String(50))                          # 来源终端标识 (如 GROUND_HMI_01)
     operator = Column(String(50), default="TEST")                 # 操作员
@@ -600,8 +601,17 @@ class EngineTrimData(Base):
     egt = Column(Float)                                           # 排气温度 (℃)
     fuel_flow = Column(Float)                                     # 燃油流量 (kg/h)
     thrust_rating = Column(Float)                                 # 推力额定 (%)
-    trim_value = Column(Float, default=0.0)                       # 当前配平值 (%)
-    trim_target = Column(Float, nullable=True)                    # 目标配平值 (%)
+    # ---- N1 配平信号 (对齐 ICD N1_Trim) ----
+    n1_trim_applied = Column(Float, default=0.0)                  # N1_Trim_Applied (-2.5~+2.5 % N1 RPM)
+    n1_trim_available = Column(Boolean, default=True)             # N1_Trim_Available (DIS)
+    n1_trim_command_left = Column(Float, default=0.0)             # N1_Trim_Command_Left (-3~+3 % N1)
+    n1_trim_command_right = Column(Float, default=0.0)            # N1_Trim_Command_Right (-3~+3 % N1)
+    n1_trim_disable = Column(Boolean, default=False)              # N1_Trim_Disable (DIS)
+    n1_trim_lower_limit = Column(Float, default=-2.5)             # N1_Trim_Lower_Limit (-2.5~0)
+    n1_trim_upper_limit = Column(Float, default=2.5)              # N1_Trim_Upper_Limit (0~+2.5)
+    engine_trim_failure = Column(Boolean, default=False)          # Engine_Trim_Failure (DIS, Fault 属性)
+    trim_value = Column(Float, default=0.0)                       # 当前配平值 (% N1, = n1_trim_applied)
+    trim_target = Column(Float, nullable=True)                    # 目标配平值 (% N1)
     trim_status = Column(String(30), default="monitoring")        # monitoring/applying/applied
     validity = Column(String(30), default="valid")                # valid/unavailable/out_of_range
     source = Column(String(20), default="emu")                    # 数据来源 (emu)
