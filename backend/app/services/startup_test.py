@@ -17,6 +17,7 @@
   成员系统 --(成员响应, UDP recv_port)--> AHMU 启动测试服务
   AHMU 启动测试服务 --(OHMS 指令, UDP send_port)--> 成员系统
 """
+from __future__ import annotations
 import asyncio
 import socket
 import uuid

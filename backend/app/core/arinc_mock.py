@@ -3,6 +3,7 @@ Mock ARINC 硬件接口 (Windows兼容)
 模拟 A664/A429/A825 板卡数据收发, 用于本地开发测试
 生产环境替换为真实板卡SDK (ctypes调用.so/.dll)
 """
+from __future__ import annotations
 import asyncio
 import random
 import struct

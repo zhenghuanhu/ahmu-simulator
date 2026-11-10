@@ -25,6 +25,7 @@
      │
      └─(校验失败: 非维护模式/成员系统未启用)▶ rejected
 """
+from __future__ import annotations
 import asyncio
 import json
 import os

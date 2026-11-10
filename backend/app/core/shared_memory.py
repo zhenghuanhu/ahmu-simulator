@@ -3,6 +3,7 @@
 与甲供系统试验软件平台通过共享内存交互
 Windows使用mmap.mmap(MAP_SHARED), Linux使用/dev/shm
 """
+from __future__ import annotations
 import mmap
 import os
 import struct

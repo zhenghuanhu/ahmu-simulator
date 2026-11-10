@@ -1,0 +1,29 @@
+# AHMU Simulator Backend Dependencies — Python 3.8 兼容版
+#
+# 说明: 完整版 requirements.txt 中的依赖版本要求 Python 3.10/3.11+,
+#       部署机器若为 Python 3.8.x 无法安装。本文件将各依赖降级到
+#       支持 Python 3.8 的最高稳定版本, 供 start.py 按 Python 版本自动选用。
+#
+# 降级对照 (原版本 -> 3.8 兼容版本):
+#   fastapi          0.141.1 -> 0.124.4   (0.124.4 为最后一个支持 3.8 的版本)
+#   uvicorn[std]     0.52.3  -> 0.33.0    (0.34 起要求 >=3.9)
+#   pydantic         2.13.4  -> 2.10.6    (2.11 起要求 >=3.9)
+#   sqlalchemy       2.0.52  -> 2.0.57    (2.0.x 全系要求 >=3.7)
+#   msgpack          1.2.1   -> 1.1.0     (1.2 起要求 >=3.10)
+#   python-multipart 0.0.32  -> 0.0.20    (0.0.32 要求 >=3.10)
+#   aiofiles         25.1.0  -> 24.1.0    (25 起要求 >=3.9)
+#   其余(loguru/apscheduler/jinja2)版本不变, 本身支持 3.8
+fastapi==0.124.4
+uvicorn[standard]==0.33.0
+pydantic==2.10.6
+sqlalchemy==2.0.57
+msgpack==1.1.0
+loguru==0.7.3
+apscheduler==3.11.3
+python-multipart==0.0.20
+aiofiles==24.1.0
+jinja2==3.1.6
+# Python 3.8 运行时代码注解评估 backport:
+# 代码使用了 PEP 585 内置泛型注解(list[str]/dict[str,X]等, 已配合 from __future__ import annotations),
+# FastAPI/pydantic 在 3.8 下运行时评估这些注解需要本包, 3.11+ 原生支持故仅 3.8 清单引入。
+eval_type_backport==0.4.0

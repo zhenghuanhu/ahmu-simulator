@@ -18,6 +18,7 @@ ICD XML 解析引擎 (Member_System_all_sender_icd_v6_1_1.xml)
     icd_entries:   [signal dict]                (入库用)
     report:        完整解析报告 (统计/冲突/异常/缺失字段/分布)
 """
+from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 from collections import Counter

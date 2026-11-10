@@ -5,6 +5,7 @@ AHMU 仿真器 - 一键启动脚本 (Windows)
 import subprocess
 import sys
 import os
+import shutil
 import time
 import socket
 import threading
@@ -15,6 +16,39 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR / "backend"
 VENV_PYTHON = BACKEND_DIR / "venv" / "Scripts" / "python.exe"
 
+def check_python_version():
+    """检查 Python 版本 (最低 3.8; 3.8~3.10 自动使用兼容依赖清单)"""
+    if sys.version_info < (3, 8):
+        print(f"[!] 当前 Python 版本过低: {sys.version.split()[0]}")
+        print("    本项目最低要求 Python 3.8 (64位)。")
+        print("    请安装 Python 3.8+ 并勾选 'Add Python to PATH' 后重试。")
+        sys.exit(1)
+
+
+def requirements_file():
+    """按 Python 版本选择依赖清单:
+    - 3.8 ~ 3.10: 使用兼容降级版 requirements-py38.txt (完整版依赖要求 3.10/3.11+)
+    - 3.11+     : 使用完整版 requirements.txt
+    """
+    if sys.version_info < (3, 11):
+        compat = BACKEND_DIR / "requirements-py38.txt"
+        if compat.exists():
+            return compat
+    return BACKEND_DIR / "requirements.txt"
+
+
+def _venv_ready():
+    """校验虚拟环境关键依赖是否安装完整 (uvicorn/fastapi/sqlalchemy 为启动必需)"""
+    try:
+        r = subprocess.run(
+            [str(VENV_PYTHON), "-c", "import uvicorn, fastapi, sqlalchemy, pydantic"],
+            capture_output=True, timeout=60,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def check_venv():
     """检查虚拟环境"""
     if not VENV_PYTHON.exists():
@@ -23,18 +57,58 @@ def check_venv():
         subprocess.run([py, "-m", "venv", str(BACKEND_DIR / "venv")], check=True)
         print("[*] 安装依赖...")
         pip = str(BACKEND_DIR / "venv" / "Scripts" / "pip.exe")
-        subprocess.run([pip, "install", "-r", str(BACKEND_DIR / "requirements.txt")], check=True)
+        _install_requirements(pip)
+        return
+    # venv 已存在, 但需校验依赖是否完整 (防止上次安装中途失败/版本不兼容)
+    if not _venv_ready():
+        print("[!] 虚拟环境存在但依赖不完整, 正在补装...")
+        pip = str(BACKEND_DIR / "venv" / "Scripts" / "pip.exe")
+        _install_requirements(pip)
+
+
+def _install_requirements(pip):
+    """安装后端依赖: 优先国内镜像, 多镜像容错, 避免访问 pypi.org 超时"""
+    req = str(requirements_file())
+    mirrors = [
+        "https://mirrors.aliyun.com/pypi/simple/",
+        "https://pypi.tuna.tsinghua.edu.cn/simple/",
+        "https://pypi.mirrors.ustc.edu.cn/simple/",
+    ]
+    last_err = None
+    for mirror in mirrors:
+        print(f"  [*] 使用镜像源: {mirror}")
+        try:
+            subprocess.run(
+                [pip, "install", "-r", req,
+                 "-i", mirror,
+                 "--timeout", "60",
+                 "--retries", "3"],
+                check=True,
+            )
+            return
+        except subprocess.CalledProcessError as e:
+            last_err = e
+            print(f"  [!] 镜像 {mirror} 安装失败, 尝试下一个...")
+    if last_err:
+        raise last_err
 
 def check_frontend():
     """检查前端是否已构建"""
     dist_dir = SCRIPT_DIR / "frontend" / "dist" / "index.html"
-    if not dist_dir.exists():
-        print("[!] 前端未构建, 正在构建...")
-        npm = "npm"
-        os.chdir(str(SCRIPT_DIR / "frontend"))
-        subprocess.run([npm, "install"], check=True, shell=True)
-        subprocess.run([npm, "run", "build"], check=True, shell=True)
-        os.chdir(str(SCRIPT_DIR))
+    if dist_dir.exists():
+        return
+    npm = shutil.which("npm")
+    if not npm:
+        print("[!] 未检测到前端构建产物 (frontend/dist), 且本机未安装 Node.js/npm。")
+        print("    请任选其一解决后重新启动:")
+        print("    1) 从开发机拷贝已构建好的 frontend/dist 目录到本项目 frontend/ 下;")
+        print("    2) 安装 Node.js (含 npm) 并加入 PATH, 再重新运行本脚本。")
+        raise RuntimeError("前端未构建且缺少 npm, 无法自动构建前端")
+    print("[!] 前端未构建, 正在构建...")
+    os.chdir(str(SCRIPT_DIR / "frontend"))
+    subprocess.run([npm, "install"], check=True, shell=True)
+    subprocess.run([npm, "run", "build"], check=True, shell=True)
+    os.chdir(str(SCRIPT_DIR))
 
 def kill_port(port):
     """终止占用指定端口的进程"""
@@ -97,6 +171,7 @@ def start_server():
     print("=" * 60)
     print()
     print("  [*] 检查环境...")
+    check_python_version()
     check_venv()
     check_frontend()
     print("  [OK] 环境就绪")

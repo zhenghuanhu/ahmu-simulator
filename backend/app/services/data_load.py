@@ -5,6 +5,7 @@
 - 300个成员系统串行加载验证
 - WebSocket推送加载进度
 """
+from __future__ import annotations
 import asyncio
 import random
 from datetime import datetime

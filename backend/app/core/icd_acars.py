@@ -36,6 +36,7 @@ ARINC619 ACARS 数据链协议编解码 (对齐 ETest acars_619_send_recv.py 的
        DNL_ACMF301/0/EOR      FDE (flight deck effect)
        DNL_ACMF401/0/EOR      构型/事件报告 (config_data / event_report)
 """
+from __future__ import annotations
 import struct
 from typing import Any, Optional
 

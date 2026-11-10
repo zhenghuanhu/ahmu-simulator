@@ -16,6 +16,7 @@
 - apply_trim(engine_id, target_trim): 下发配平指令, EMU 模拟执行并返回是否接受
 - get_engine_data(engine_id) / get_all_engine_data(): 查询当前发动机配平数据
 """
+from __future__ import annotations
 import asyncio
 import random
 from datetime import datetime

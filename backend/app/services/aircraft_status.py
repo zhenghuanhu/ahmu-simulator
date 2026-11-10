@@ -36,6 +36,7 @@
   14 engine_shutdown 关车     空地=地 & 油门≤怠速 & 空速<滑行阈值 (滑入后)
   15 maintenance 维护        维护开关∈{地面测试,数据加载}
 """
+from __future__ import annotations
 import asyncio
 import json
 import socket

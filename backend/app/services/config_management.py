@@ -7,6 +7,7 @@
 - 维护人员可从人机界面请求某个成员系统的构型报告并展示构型信息
 - 支持不少于 400 个成员系统的构型报告
 """
+from __future__ import annotations
 import asyncio
 import json
 import random

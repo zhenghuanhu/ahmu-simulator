@@ -15,6 +15,7 @@ ARINC744A 打印协议编解码 (对齐 ETest A744_print_ACK.py 的解析逻辑)
   ETest A744_print_ACK.py 中 `data[3:]` 为数据块, 故头为 3 字节 (optCode+blockNum);
   BLOCK_SIZE=150 为每块有效数据 (payload 153 字节 = 150 数据 + 3 填充)。
 """
+from __future__ import annotations
 import json
 import struct
 from typing import Any, Optional

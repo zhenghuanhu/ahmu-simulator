@@ -29,6 +29,7 @@
      │
      └─(校验失败: 非维护模式/成员系统非法/类型非法)▶ rejected
 """
+from __future__ import annotations
 import asyncio
 import os
 import random

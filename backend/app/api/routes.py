@@ -1,6 +1,7 @@
 """
 API路由层 - REST API + WebSocket端点
 """
+from __future__ import annotations
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query, Path, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session

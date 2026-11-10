@@ -11,6 +11,7 @@
         与构型管理 ACR 目录一致; 兼容成员系统 code 字符串回退。
 支持多达 199 个成员系统并发启动检索任务 (每任务按 equip_id 独立记录状态)。
 """
+from __future__ import annotations
 import asyncio
 from datetime import datetime
 from typing import Optional

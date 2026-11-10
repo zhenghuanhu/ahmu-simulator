@@ -2,6 +2,7 @@
 ICD解析引擎 + MemberModel生成器
 解析ICD文件 -> 自动生成MemberModel对象 -> msgpack二进制缓存
 """
+from __future__ import annotations
 import os
 import json
 import struct

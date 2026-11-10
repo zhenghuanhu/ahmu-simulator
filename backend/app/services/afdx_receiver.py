@@ -6,6 +6,7 @@ AFDX / ARINC 664 接收通道服务
 - 解码复用 icd_afdx.decode_frame (即 MessageFrame.parse_any), 支持 SINT/UBNR/BNR/FLOAT/BOOL/DIS
 - UDP 线程解码后经 asyncio.run_coroutine_threadsafe 提交主循环, 调用 param_service.ingest_afdx_signals
 """
+from __future__ import annotations
 import asyncio
 import socket
 import threading

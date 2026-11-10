@@ -4,6 +4,7 @@ __pycache__/
 *.so
 backend/venv/
 backend/.venv/
+backend/venv-*.bak/
 *.egg-info/
 
 # Node
@@ -35,6 +36,9 @@ frontend/dist/
 # 日志
 logs/
 *.log
+
+# 发布包产物 (pack_release.py 生成的 zip/目录)
+release/
 
 # 系统文件
 .DS_Store

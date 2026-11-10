@@ -21,6 +21,7 @@ messageID 对照 (config_verify.py):
   0x0306 = ACRSoftPartResponse (测试端亦见 ACRSoftPartRequest)
 """
 
+from __future__ import annotations
 # ==================== colour 构型一致性状态 ====================
 # 1=正常(与基本构型一致), 2=黄色(构型变更), 3=红色(构型不匹配)
 COLOUR_NORMAL = 1

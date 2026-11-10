@@ -8,6 +8,7 @@
   - 参数有效性校验 (valid/unavailable/out_of_range/invalid), 按 ATA 章节查询
   - 接收 PAA 转发的参数用于飞机运行数据存储
 """
+from __future__ import annotations
 import json
 import asyncio
 import math

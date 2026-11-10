@@ -6,6 +6,7 @@
 - 历史航段失效报告(-128~127) + 故障整合到单个LRU
 - 成员系统启用/禁用失效报告 + ICD故障注入(控制持续时间)
 """
+from __future__ import annotations
 import asyncio
 import random
 import json

@@ -8,6 +8,7 @@ AFDX / ARINC 664 消息编解码 (基于 ICD 信号定义)
 
 与 parse_any 完全对齐: 支持 SINT/UBNR/BNR/FLOAT(IEEE754)/BOOL/DIS 等类型。
 """
+from __future__ import annotations
 import struct
 from typing import Any, Optional
 

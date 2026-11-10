@@ -2,6 +2,7 @@
 WebSocket 连接管理器
 支持5个终端同时接入, 实时推送故障/状态/参数数据
 """
+from __future__ import annotations
 import json
 import asyncio
 from datetime import datetime
