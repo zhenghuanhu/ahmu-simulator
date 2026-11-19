@@ -40,7 +40,7 @@ from app.database import SessionLocal, NVMResetLog, NVMResetResult
 from app.core.websocket_manager import ws_manager
 from app.config import NVM_RESET_CONFIG, CONFIG_DIR
 from app.services.maintenance_mode import maintenance_service
-from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
+from app.core.member_catalog import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
 
 
 class ResetType(str, Enum):

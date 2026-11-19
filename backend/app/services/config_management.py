@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, BaseConfig, MemberConfig, ConfigErrorReport, AcrConfigReport
 from app.core.websocket_manager import ws_manager
 from app.core import icd_config_acr as acr_icd
-from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
+from app.core.member_catalog import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
 from app.config import CONFIG_REPORT_RX_CONFIG
 
 # 设备标识状态消息包含的构型项 (item, 类型, 中文名)

@@ -18,7 +18,7 @@ from typing import Optional
 from loguru import logger
 
 from app.database import SessionLocal, FaultHistoryTask
-from app.services.lifecycle import MEMBER_SYSTEMS
+from app.core.member_catalog import MEMBER_SYSTEMS
 from app.core import icd_config_acr as acr_icd
 
 

@@ -21,11 +21,6 @@ for d in [DATA_DIR, CACHE_DIR, CONFIG_DIR, LOG_DIR]:
 
 # 数据库配置
 DATABASE_PATH = DATA_DIR / "ahmu.db"
-DATABASE_URL = f"sqlite:///{DATABASE_URL_PATH(DATABASE_PATH)}" if False else f"sqlite:///{DATABASE_PATH}"
-
-def DATABASE_URL_PATH(p):
-    return str(p).replace("\\", "/")
-
 DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 
 # WebSocket 配置
@@ -58,8 +53,8 @@ FAULT_DIAGNOSIS_CONFIG = {
     "auto_report_enabled": False,
     # 每个成员系统每次上报周期实际产生故障的概率 (0~1), 仅 auto_report_enabled=True 时生效
     "auto_report_probability": 0.005,
-    # 成员系统故障上报频率 (Hz)
-    "report_frequencies": [0.25, 0.5, 1.0, 2.0],
+    # 成员系统故障上报频率 (Hz) (对齐 5.4.1: 0.5/1/2/4Hz)
+    "report_frequencies": [0.5, 1.0, 2.0, 4.0],
 }
 
 # 故障/失效报告 ICD 接收通道配置 (对齐 OHMS 故障与失效报告批量创建.txt)

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, ParamConfig, ParamSnapshot, ParamReport, QuickAccessList
 from app.core.websocket_manager import ws_manager
 from app.core.icd_parser import icd_parser
-from app.services.lifecycle import MEMBER_SYSTEMS
+from app.core.member_catalog import MEMBER_SYSTEMS
 from app.config import DATA_DIR
 
 # 参数报告下传默认目录

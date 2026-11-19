@@ -43,7 +43,7 @@ from app.database import SessionLocal, NVMData, NVMDownloadLog
 from app.core.websocket_manager import ws_manager
 from app.config import NVM_DOWNLOAD_CONFIG
 from app.services.maintenance_mode import maintenance_service
-from app.services.lifecycle import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
+from app.core.member_catalog import MEMBER_SYSTEMS, MEMBER_SYSTEM_MAP
 
 
 class NVMDownloadState(str, Enum):
