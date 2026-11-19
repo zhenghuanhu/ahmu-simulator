@@ -1,10 +1,11 @@
 """
 故障诊断服务 (技术方案 4.3.6 故障诊断功能)
-- 接收成员系统以不同频率(0.25/0.5/1/2Hz)周期性上报的故障报告
+- 接收成员系统以不同频率(0.5/1/2/4Hz)周期性上报的故障报告
 - 数据正确性校验 + 故障方程级联过滤 + FDE关联修正
 - 失效报告生成 + 与/或逻辑运算定位根源故障
 - 历史航段失效报告(-128~127) + 故障整合到单个LRU
 - 成员系统启用/禁用失效报告 + ICD故障注入(控制持续时间)
+- 接收健康监控(5.4.1): 接收通道对象 + 丢帧检测 + 通信中断告警
 """
 from __future__ import annotations
 import asyncio
@@ -12,6 +13,7 @@ import random
 import json
 import socket
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from loguru import logger
@@ -33,7 +35,57 @@ FAULTS_PER_MEMBER = 6
 FDE_COUNT = 100
 
 # 故障上报频率 (Hz) (默认值, 实际以 config.FAULT_DIAGNOSIS_CONFIG 为准)
-REPORT_FREQUENCIES = FAULT_DIAGNOSIS_CONFIG.get("report_frequencies", [0.25, 0.5, 1.0, 2.0])
+# 对齐 5.4.1: 0.5Hz / 1Hz / 2Hz / 4Hz
+REPORT_FREQUENCIES = FAULT_DIAGNOSIS_CONFIG.get("report_frequencies", [0.5, 1.0, 2.0, 4.0])
+
+# 接收健康监控: 连续丢帧超过该次数上报"成员系统通信中断"告警 (5.4.1)
+COMM_DROP_THRESHOLD = 3
+# 接收超时阈值系数: elapsed > 1.5 × period 判定丢帧 (5.4.1)
+TIMEOUT_FACTOR = 1.5
+
+
+@dataclass
+class FaultReceiveChannel:
+    """接收通道对象 (成员系统-频率组合), 对齐 5.4.1 接收通道划分
+
+    字段对应设计要求:
+      - channel_id       通道标识 (成员系统 ID + 频率)
+      - period           期望接收周期 (ms), period = 1/frequency
+      - t_last_recv      最近一次成功接收的时间戳
+      - timeout_threshold 接收超时阈值 (1.5 倍周期, 允许抖动)
+      - drop_count       连续丢帧计数器
+    """
+    member_system: str
+    frequency: float          # Hz
+
+    def __post_init__(self):
+        self.period: float = 1000.0 / self.frequency       # ms
+        self.timeout_threshold: float = self.period * TIMEOUT_FACTOR  # ms
+        self.t_last_recv: float = 0.0                      # monotonic 时间戳
+        self.drop_count: int = 0
+        self.alerted: bool = False
+
+    @property
+    def channel_id(self) -> str:
+        return f"{self.member_system}@{self.frequency:g}Hz"
+
+    def mark_received(self):
+        """收到数据: 更新 t_last_recv, 清零丢帧计数器与告警标记"""
+        self.t_last_recv = time.monotonic()
+        self.drop_count = 0
+        self.alerted = False
+
+    def status(self) -> dict:
+        return {
+            "channel_id": self.channel_id,
+            "member_system": self.member_system,
+            "frequency": self.frequency,
+            "period": self.period,
+            "timeout_threshold": self.timeout_threshold,
+            "t_last_recv": self.t_last_recv,
+            "drop_count": self.drop_count,
+            "alerted": self.alerted,
+        }
 
 # FDE 驾驶舱效应描述模板
 FDE_TEXTS = [
@@ -71,6 +123,8 @@ class FaultDiagnosisService:
         self._rx_sock: Optional[socket.socket] = None
         self._rx_host = FAULT_RX_CONFIG.get("recv_host", "0.0.0.0")
         self._rx_port = FAULT_RX_CONFIG.get("recv_port", 34850)
+        # 接收通道对象 (成员系统-频率组合 -> FaultReceiveChannel), 用于健康监控 (5.4.1)
+        self._rx_channels: dict[str, FaultReceiveChannel] = {}
 
     # ==================== 生命周期 ====================
 
@@ -79,12 +133,15 @@ class FaultDiagnosisService:
         self._build_member_catalog()
         self._build_fde_pool()
         self._build_fault_model()
+        self._build_rx_channels()
         self._setup_rx_socket()
         logger.info(f"故障诊断服务已启动 (成员系统{len(self._member_catalog)}, "
+                    f"接收通道{len(self._rx_channels)}, "
                     f"故障模型{len(self._fault_model)}, FDE{len(self._fde_pool)}, "
                     f"自动上报={'启用' if self._auto_report_enabled else '关闭'})")
         asyncio.create_task(self._receive_loop())
         asyncio.create_task(self._fault_rx_loop())
+        asyncio.create_task(self._health_monitor_loop())
 
     async def stop(self):
         self._running = False
@@ -104,6 +161,14 @@ class FaultDiagnosisService:
         for m in catalog:
             self._member_freq[m["code"]] = random.choice(REPORT_FREQUENCIES)
             self._failure_enabled[m["code"]] = True
+
+    def _build_rx_channels(self):
+        """为每个成员系统-频率组合建立独立接收通道对象 (5.4.1 接收通道划分)"""
+        self._rx_channels.clear()
+        for m in self._member_catalog:
+            code = m["code"]
+            freq = self._member_freq.get(code, 1.0)
+            self._rx_channels[code] = FaultReceiveChannel(code, freq)
 
     def _build_fde_pool(self):
         """初始化 FDE 驾驶舱效应消息池 (100条)"""
@@ -239,7 +304,7 @@ class FaultDiagnosisService:
 
     async def _receive_loop(self):
         """不同频率周期接收成员系统故障报告"""
-        TICK = 0.25  # 4Hz 调度粒度, 覆盖 0.25/0.5/1/2Hz 上报
+        TICK = 0.05  # 50Hz 调度粒度(20ms), 覆盖 0.5/1/2/4Hz 上报, 对齐 5.4.1
         while self._running:
             now = time.monotonic()
             for m in self._member_catalog:
@@ -323,6 +388,10 @@ class FaultDiagnosisService:
         member = str(msg.get("member_system") or "").strip()
         if not member:
             return
+        # 更新接收通道健康状态: 收到数据 -> 刷新 t_last_recv, 清零丢帧计数器 (5.4.1)
+        ch = self._rx_channels.get(member)
+        if ch:
+            ch.mark_received()
         fault_code = msg.get("fault_code")
         failure_code = msg.get("failure_code")
         severity = msg.get("severity", "minor")
@@ -331,6 +400,52 @@ class FaultDiagnosisService:
         elif failure_code:
             # 直接注入失效报告 (无故障模型关联时仍记录)
             await self.process_failure_report(member, str(failure_code), str(severity))
+
+    async def _health_monitor_loop(self):
+        """接收健康监控 (5.4.1): 1Hz 巡检所有接收通道
+
+        对每个通道计算 elapsed = t_now - t_last_recv,
+        若 elapsed > 1.5 × period 判定丢帧, 丢帧计数器 +1;
+        连续丢帧超过 COMM_DROP_THRESHOLD 次, 上报"成员系统通信中断"告警。
+        """
+        while self._running:
+            await asyncio.sleep(1.0)
+            now = time.monotonic()
+            for code, ch in self._rx_channels.items():
+                if ch.t_last_recv <= 0:
+                    continue  # 尚未收到首个数据, 跳过判定
+                elapsed_ms = (now - ch.t_last_recv) * 1000.0
+                if elapsed_ms > ch.timeout_threshold:
+                    ch.drop_count += 1
+                    logger.warning(
+                        f"[FaultDiagnosis] 接收通道 {ch.channel_id} 疑似丢帧: "
+                        f"elapsed={elapsed_ms:.0f}ms > {ch.timeout_threshold:.0f}ms, "
+                        f"连续丢帧 {ch.drop_count}")
+                    if ch.drop_count >= COMM_DROP_THRESHOLD and not ch.alerted:
+                        ch.alerted = True
+                        logger.error(
+                            f"[FaultDiagnosis] 成员系统 {code} 通信中断告警: "
+                            f"连续丢帧 {ch.drop_count} 次")
+                        await ws_manager.broadcast("fault_comm_interrupt", {
+                            "member_system": code,
+                            "channel_id": ch.channel_id,
+                            "frequency": ch.frequency,
+                            "period": ch.period,
+                            "timeout_threshold": ch.timeout_threshold,
+                            "elapsed_ms": round(elapsed_ms),
+                            "drop_count": ch.drop_count,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        })
+
+    def get_rx_channel_status(self) -> dict:
+        """查询接收通道健康状态 (可观测性, 供界面/接口展示)"""
+        channels = [ch.status() for ch in self._rx_channels.values()]
+        alert_count = sum(1 for c in channels if c["alerted"])
+        return {
+            "total": len(channels),
+            "alert_count": alert_count,
+            "channels": channels,
+        }
 
     async def process_failure_report(self, member_system: str, failure_code: str,
                                      severity: str = "minor") -> dict:
