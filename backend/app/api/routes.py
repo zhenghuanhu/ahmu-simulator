@@ -515,12 +515,21 @@ async def get_quick_lists(db: Session = Depends(get_db)):
     return {"items": param_service.get_quick_lists(db)}
 
 
+@router.get("/params/quicklists/stats")
+async def get_quick_list_stats():
+    """获取快捷访问列表算法统计 (列表数/容量/负载因子/内存评估)"""
+    return param_service.get_quick_list_stats()
+
+
 @router.post("/params/quicklists")
 async def create_quick_list(payload: dict, db: Session = Depends(get_db)):
     """创建快捷访问列表"""
     name = payload.get("name", "")
     params = payload.get("params", [])
-    list_id = param_service.create_quick_list(db, name, params)
+    try:
+        list_id = param_service.create_quick_list(db, name, params)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
     return {"status": "ok", "list_id": list_id}
 
 

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, ParamConfig, ParamSnapshot, ParamReport, QuickAccessList
 from app.core.websocket_manager import ws_manager
 from app.core.icd_parser import icd_parser
+from app.core.quick_list_manager import quick_list_manager, MAX_LISTS, MAX_PARAMS_PER_LIST
 from app.services.lifecycle import MEMBER_SYSTEMS
 from app.config import DATA_DIR
 
@@ -54,11 +55,14 @@ class ParamMonitorService:
         self._sim_values: dict[str, dict] = {}             # param_name -> 模拟值(data_source=simulated)
         self._simulation_enabled = False                   # 模拟数据开关
         self._sim_task: Optional[asyncio.Task] = None
+        # 快捷访问列表哈希索引注册表 (5.4.3, 全局单例)
+        self._quick_registry = quick_list_manager
 
     async def start(self):
         """启动参数监控服务"""
         self._running = True
         self._init_default_params()
+        self._load_quick_lists_from_db()
         self._start_simulation_loop()
         logger.info("参数监控服务已启动 (真实数据来自 PAA 转发, 模拟数据由开关控制)")
 
@@ -676,31 +680,51 @@ class ParamMonitorService:
             logger.error(f"参数报告下传失败: {e}")
             return {"status": "error", "message": f"下传失败: {e}"}
 
-    # ==================== 快捷访问列表 ====================
+    # ==================== 快捷访问列表 (5.4.3 哈希索引稀疏列表管理) ====================
+
+    def _load_quick_lists_from_db(self):
+        """启动时从数据库重建快捷访问列表哈希索引 (内存注册表)"""
+        db = SessionLocal()
+        try:
+            rows = db.query(QuickAccessList).order_by(QuickAccessList.id).all()
+            for r in rows:
+                params = json.loads(r.param_names) if r.param_names else []
+                self._quick_registry.load_existing(r.id, r.list_name, params)
+            if rows:
+                logger.info(f"快捷访问列表哈希索引已重建: {len(rows)} 张")
+        finally:
+            db.close()
 
     def create_quick_list(self, db: Session, name: str, params: list[str]) -> int:
-        """创建快捷访问列表"""
-        ql = QuickAccessList(list_name=name, param_names=json.dumps(params))
+        """创建快捷访问列表 (5.4.3: O(1) 哈希索引插入 + 100 上限校验 + 落库)"""
+        list_id = self._quick_registry.create_list(name, params)
+        if list_id is None:
+            raise ValueError(f"快捷访问列表数量已达上限 {MAX_LISTS}")
+        ql = QuickAccessList(id=list_id, list_name=name, param_names=json.dumps(params))
         db.add(ql)
         db.commit()
-        db.refresh(ql)
-        logger.info(f"快捷列表已创建: ID={ql.id}, 名称={name}, 参数数={len(params)}")
-        return ql.id
+        logger.info(f"快捷列表已创建: ID={list_id}, 名称={name}, 参数数={len(params)}")
+        return list_id
 
     def get_quick_lists(self, db: Session) -> list:
-        """获取所有快捷访问列表"""
-        items = db.query(QuickAccessList).order_by(QuickAccessList.id).all()
+        """获取所有快捷访问列表 (从内存哈希索引 O(1) 读取)"""
+        lists = self._quick_registry.all_lists()
+        lists.sort(key=lambda x: x.list_id)
         return [{
-            "id": q.id,
-            "name": q.list_name,
-            "params": json.loads(q.param_names) if q.param_names else [],
-            "created_at": q.created_at.isoformat() if q.created_at else None,
-            "updated_at": q.updated_at.isoformat() if q.updated_at else None,
-        } for q in items]
+            "id": lst.list_id,
+            "name": lst.name,
+            "params": lst.param_names(),
+            "size": lst.size,
+            "capacity": lst.capacity,
+        } for lst in lists]
+
+    def get_quick_list_stats(self) -> dict:
+        """快捷访问列表算法统计 (列表数/容量/负载因子/内存评估)"""
+        return self._quick_registry.stats()
 
     def update_quick_list(self, db: Session, list_id: int, name: Optional[str] = None,
                           params: Optional[list[str]] = None) -> dict:
-        """修改快捷访问列表 (名称/参数)"""
+        """修改快捷访问列表 (名称/参数): 同步内存哈希索引 + 落库"""
         ql = db.query(QuickAccessList).filter(QuickAccessList.id == list_id).first()
         if not ql:
             return {"status": "error", "message": f"快捷列表 {list_id} 不存在"}
@@ -708,43 +732,52 @@ class ParamMonitorService:
             ql.list_name = name
         if params is not None:
             ql.param_names = json.dumps(params)
+            # 重建该列表的哈希索引 (用新参数集替换)
+            self._quick_registry.delete_list(list_id)
+            self._quick_registry.load_existing(list_id, name or ql.list_name, params)
+        else:
+            lst = self._quick_registry.get_list(list_id)
+            if lst and name is not None:
+                lst.name = name
         db.commit()
         return {"status": "ok", "id": list_id, "name": ql.list_name,
                 "params": json.loads(ql.param_names) if ql.param_names else []}
 
     def delete_quick_list(self, db: Session, list_id: int) -> dict:
-        """删除快捷访问列表"""
+        """删除快捷访问列表 (同步内存哈希索引 + 落库)"""
         ql = db.query(QuickAccessList).filter(QuickAccessList.id == list_id).first()
         if not ql:
             return {"status": "error", "message": f"快捷列表 {list_id} 不存在"}
         db.delete(ql)
         db.commit()
+        self._quick_registry.delete_list(list_id)
         return {"status": "ok", "id": list_id}
 
     def add_param_to_list(self, db: Session, list_id: int, param_name: str) -> dict:
-        """向快捷列表增加参数"""
+        """向快捷列表增加参数 (5.4.3: O(1) 哈希索引添加 + 50 上限校验 + 落库)"""
         ql = db.query(QuickAccessList).filter(QuickAccessList.id == list_id).first()
         if not ql:
             return {"status": "error", "message": f"快捷列表 {list_id} 不存在"}
         if param_name not in self._params:
             return {"status": "error", "message": f"参数 {param_name} 不存在"}
-        names = json.loads(ql.param_names) if ql.param_names else []
-        if param_name not in names:
-            names.append(param_name)
-            ql.param_names = json.dumps(names)
-            db.commit()
+        if not self._quick_registry.add_param(list_id, param_name):
+            return {"status": "error",
+                    "message": f"快捷列表 {list_id} 参数已达上限 {MAX_PARAMS_PER_LIST}"}
+        names = self._quick_registry.get_list(list_id).param_names()
+        ql.param_names = json.dumps(names)
+        db.commit()
         return {"status": "ok", "id": list_id, "params": names}
 
     def remove_param_from_list(self, db: Session, list_id: int, param_name: str) -> dict:
-        """从快捷列表删除参数"""
+        """从快捷列表删除参数 (同步内存哈希索引 + 落库)"""
         ql = db.query(QuickAccessList).filter(QuickAccessList.id == list_id).first()
         if not ql:
             return {"status": "error", "message": f"快捷列表 {list_id} 不存在"}
-        names = json.loads(ql.param_names) if ql.param_names else []
-        if param_name in names:
-            names.remove(param_name)
-            ql.param_names = json.dumps(names)
-            db.commit()
+        self._quick_registry.remove_param(list_id, param_name)
+        lst = self._quick_registry.get_list(list_id)
+        names = lst.param_names() if lst else []
+        ql.param_names = json.dumps(names)
+        db.commit()
         return {"status": "ok", "id": list_id, "params": names}
 
     # ==================== 成员系统监控服务启停 ====================
