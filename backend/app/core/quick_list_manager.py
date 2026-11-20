@@ -11,7 +11,8 @@
   2. 单张参数列表: 有序数组 + 哈希索引的混合结构
      - 参数条目按添加顺序存储在数组中, 支持下标访问 (快捷访问的第 N 个参数)
      - 维护参数名 → 数组下标的哈希映射, O(1) 按名查找
-     - 每张列表预分配 64 个参数槽位 (> 50 要求, 留有余量)
+     - 参数条目结构: 名称 + 值 + 元数据 (类型/单位/来源/ATA 等, 每条目约 64 字节)
+     - 每张列表预分配 64 个参数槽位, 实际上限 64 (> 最低要求 50, 留有余量)
 
 算法复杂度:
   - 创建列表: O(1)
@@ -20,7 +21,8 @@
   - 按序访问: O(1) (数组下标)
 
 存储容量评估:
-  100 张 × 50 参数 × 64 字节 (名称+值+元数据) ≈ 320KB,
+  最低要求 100 张 × 50 参数 × 64 字节 (名称+值+元数据) ≈ 320KB;
+  满载 (每张 64 参数) 100 张 × 64 参数 × 64 字节 ≈ 400KB。
   加上哈希表与索引开销, 总内存 < 1MB, 完全在仿真服务器内存容量内。
 """
 from __future__ import annotations
@@ -28,8 +30,9 @@ from typing import Optional
 
 # ==================== 容量与性能常量 ====================
 MAX_LISTS = 100              # 全局列表数量上限 (不少于 100 张)
-MAX_PARAMS_PER_LIST = 50     # 单张列表参数数量上限 (要求 50)
-PREALLOC_SLOTS = 64          # 每张列表预分配参数槽位数 (> 50 留有余量)
+MIN_PARAMS_PER_LIST = 50     # 每张列表参数数量最低要求 (5.4.4: 不少于 50 个参数)
+MAX_PARAMS_PER_LIST = 64     # 每张列表参数数量实际上限 (= 预分配槽位, 留有余量)
+PREALLOC_SLOTS = 64          # 每张列表预分配参数槽位数 (= MAX_PARAMS_PER_LIST)
 INITIAL_CAPACITY = 128       # 注册表哈希表初始容量
 LOAD_FACTOR = 0.75           # 负载因子, 超过则动态扩容
 PARAM_ENTRY_BYTES = 64       # 每参数条目内存估算 (名称 + 值 + 元数据)
@@ -45,7 +48,7 @@ class QuickParamList:
     def __init__(self, list_id: int, name: str):
         self.list_id = list_id
         self.name = name
-        # 预分配 64 个参数槽位 (> 50 要求)
+        # 预分配 64 个参数槽位 (> 50 最低要求, 留有余量)
         self._entries: list[Optional[dict]] = [None] * PREALLOC_SLOTS
         self._index: dict[str, int] = {}   # 参数名 -> 数组下标 (哈希映射)
         self._count = 0
@@ -60,20 +63,28 @@ class QuickParamList:
         return PREALLOC_SLOTS
 
     # ---------- 参数添加 (O(1) 平均) ----------
-    def add_param(self, name: str, value=None) -> bool:
-        """追加参数名-值对到数组末尾, 并在哈希索引记录 参数名 → 下标
+    def add_param(self, name: str, value=None, **meta) -> bool:
+        """追加参数条目到数组末尾, 并在哈希索引记录 参数名 → 下标
 
-        校验数量是否达 50 上限 (或预分配 64), 未满才添加。
-        返回是否添加成功 (False = 已达上限)。
+        参数条目结构 (名称 + 值 + 元数据), 每条目约 64 字节:
+          name  - 参数名 (哈希索引键)
+          value - 参数当前值
+          meta  - 元数据 (类型/单位/来源/ATA 等, 可选)
+        校验数量是否达实际上限 64 (留有余量, 满足"不少于 50"),
+        未满才添加。返回是否添加成功 (False = 已达上限)。
         """
         if self._count >= MAX_PARAMS_PER_LIST:
             return False
         if name in self._index:
             # 已存在: 更新值 (不重复添加)
-            self._entries[self._index[name]]["value"] = value
+            entry = self._entries[self._index[name]]
+            entry["value"] = value
+            entry.update(meta)
             return True
         idx = self._count
-        self._entries[idx] = {"name": name, "value": value}
+        entry = {"name": name, "value": value}
+        entry.update(meta)
+        self._entries[idx] = entry
         self._index[name] = idx
         self._count += 1
         return True
@@ -245,11 +256,11 @@ class QuickListRegistry:
         return [lst for _lid, lst in self._table.items()]
 
     # ---------- 参数添加 / 访问 (O(1)) ----------
-    def add_param(self, list_id: int, name: str, value=None) -> bool:
+    def add_param(self, list_id: int, name: str, value=None, **meta) -> bool:
         lst = self._table.get(list_id)
         if lst is None:
             return False
-        return lst.add_param(name, value)
+        return lst.add_param(name, value, **meta)
 
     def get_param_by_name(self, list_id: int, name: str) -> Optional[dict]:
         """按名称快速访问 O(1)"""
@@ -283,8 +294,9 @@ class QuickListRegistry:
             "load_factor": round(self.load_factor, 4),
             "memory_usage_bytes": self.memory_usage_bytes(),
             "memory_usage_kb": round(self.memory_usage_bytes() / 1024, 2),
-            "prealloc_slots_per_list": PREALLOC_SLOTS,
+            "min_params_per_list": MIN_PARAMS_PER_LIST,
             "max_params_per_list": MAX_PARAMS_PER_LIST,
+            "prealloc_slots_per_list": PREALLOC_SLOTS,
         }
 
 
