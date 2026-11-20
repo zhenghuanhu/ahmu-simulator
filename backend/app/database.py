@@ -786,3 +786,24 @@ class AcrConfigReport(Base):
     soft_location_description = Column(String(200))             # 软件位置描述
     soft_parts = Column(Text)                                   # 软件部件 (JSON list)
     report_time = Column(DateTime, default=datetime.utcnow, index=True)  # 接收时间
+
+
+class EquipStatusRecord(Base):
+    """设备标识状态记录表 (5.4.2 不同频率设备标识状态数据接收)
+
+    记录经异步延迟处理后更新的设备状态快照 (每成员系统一条最新记录, upsert 更新):
+      - t_arrival: 帧到达时间戳 (monotonic)
+      - t_last_process: 最后处理时间戳 (monotonic)
+      - status_data: 设备状态负载 (JSON)
+    供追溯成员系统的设备标识状态数据。
+    """
+    __tablename__ = "equip_status_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    member_system = Column(String(50), nullable=False, index=True)
+    equip_id = Column(Integer, index=True)                      # 数字设备标识
+    frequency = Column(Float)                                   # 成员发送频率 (Hz)
+    status_data = Column(Text)                                  # 设备状态数据 (JSON)
+    t_arrival = Column(Float)                                   # 帧到达时间戳 (monotonic)
+    t_last_process = Column(Float)                              # 最后处理时间戳 (monotonic)
+    processed_at = Column(DateTime, default=datetime.utcnow, index=True)

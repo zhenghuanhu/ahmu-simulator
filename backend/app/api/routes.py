@@ -30,6 +30,7 @@ from app.services.nvm_reset import nvm_reset_service
 from app.services.nvm_download import nvm_download_service
 from app.services.aircraft_status import aircraft_status_service
 from app.services.comm_security import comm_security_service
+from app.services.equip_status import equip_status_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
 from app.config import SIMULATION_CONFIG
@@ -1376,3 +1377,17 @@ async def get_comm_security_logs(
 async def get_comm_security_stats():
     """查询通信安全统计"""
     return comm_security_service.get_stats()
+
+
+# ==================== 设备标识状态数据接收 (5.4.2) ====================
+
+@router.get("/equip-status/stats")
+async def get_equip_status_stats():
+    """查询设备标识状态处理统计 (接收/处理/丢弃/超时 + 队列积压)"""
+    return equip_status_service.get_processing_stats()
+
+
+@router.get("/equip-status")
+async def get_equip_status(member: Optional[str] = None):
+    """查询设备标识状态记录 (内存快照; 指定 member 查单个)"""
+    return equip_status_service.get_device_status(member)
