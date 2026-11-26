@@ -2,6 +2,8 @@
 
 本文档说明 AHMU 仿真器在**另一台 Windows 电脑**上运行所需的全部环境与依赖，以及打包、安装、运行的完整步骤。
 
+> **下位机部署（CentOS 7.9 实时操作系统 / 内核 3.10.0-1160）请参见** [`docs/centos7-adapter.md`](docs/centos7-adapter.md)，配套脚本为 `start.sh`（Linux 启动）与 `ahmu-simulator.service`（systemd 服务）。
+
 ---
 
 ## 一、项目技术栈与运行环境

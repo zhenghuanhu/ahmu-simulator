@@ -1,0 +1,43 @@
+# =============================================================================
+# AHMU 仿真器 - systemd 服务单元 (CentOS 7.9 / systemd 219)
+# 安装: 复制到 /etc/systemd/system/ahmu-simulator.service 后执行
+#   systemctl daemon-reload && systemctl enable --now ahmu-simulator
+# =============================================================================
+[Unit]
+Description=AHMU Simulator Service (航电系统 AHMU 仿真器)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ahmu
+Group=ahmu
+WorkingDirectory=/opt/ahmu/backend
+# 注意: 使用单 worker (默认), 见下方"多 worker 限制"说明
+ExecStart=/opt/ahmu/backend/venv/bin/python -m uvicorn app.main:app \
+    --host 0.0.0.0 --port 8443
+Restart=always
+RestartSec=3
+
+# 资源限制
+LimitNOFILE=65536
+MemoryMax=4G
+
+# 实时性优化 (仅 PREEMPT_RT 内核下可选, 需 root 且谨慎, 默认注释)
+# CPUSchedulingPolicy=fifo
+# CPUSchedulingPriority=60
+# Nice=-10
+
+StandardOutput=append:/opt/ahmu/backend/logs/app.log
+StandardError=append:/opt/ahmu/backend/logs/error.log
+
+[Install]
+WantedBy=multi-user.target
+
+# =============================================================================
+# 【多 worker 限制说明】(重要)
+# 本项目 WebSocket 广播依赖进程内单例 ws_manager (broadcast 到本进程所有连接)。
+# 若使用 --workers N (N>1), 每个 worker 有独立 ws_manager, 跨进程 WebSocket
+# 广播失效, 前端可能收不到其他 worker 的推送。故下位机部署必须使用单 worker。
+# 如需多 worker 横向扩展, 需引入 Redis Pub/Sub 等跨进程广播中间件 (后续演进)。
+# =============================================================================
