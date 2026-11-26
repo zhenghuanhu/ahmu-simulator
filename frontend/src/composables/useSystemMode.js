@@ -27,8 +27,9 @@ export const MAINTENANCE_ONLY_PATHS = ['/groundtest', '/dataload', '/nvmreset', 
  * 跨模式页面: 两种模式下始终可访问, 不受模式切换影响
  * - 配置页 (SETTINGS): 系统级设置 (标签栏显示/故障诊断配置/维护模式调试),
  *   需在正常与维护模式下均保持可用, 便于维护期间调整系统配置。
+ * - 关于页 (ABOUT): 软件版本与授权信息展示, 需在两种模式下均可见。
  */
-export const ALWAYS_ALLOWED_PATHS = ['/settings']
+export const ALWAYS_ALLOWED_PATHS = ['/settings', '/about']
 
 /** 判断路径在当前模式下是否可访问 */
 export function isPathAllowed(path, mode = systemMode.value) {

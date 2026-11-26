@@ -38,6 +38,32 @@ PORT = 8443
 DEBUG = True
 RELOAD = True
 
+# 软件版本与构建信息配置 (版本信息展示功能)
+VERSION_CONFIG = {
+    "software_name": "AHMU 仿真器",        # 软件名称(中文)
+    "software_name_en": "AHMU Simulator",   # 软件名称(英文)
+    "version": "1.0.0",                     # 版本号
+    "build": "20261126.1",                  # 构建号
+    "build_time": "2026-11-26 13:49",       # 构建时间
+    "git_commit": "da7dd0b",                # Git 提交号
+    "aircraft_model": "某型飞机",            # 适用机型
+}
+
+# 软件授权信息配置 (授权信息展示功能 - 最小静态展示版, 由交付时人工维护)
+LICENSE_CONFIG = {
+    "license_type": "演示授权",             # 授权类型: 永久授权/限期授权/试用授权/演示授权
+    "license_status": "valid",              # 授权状态: valid/expiring/expired/unlicensed/error
+    "start_date": "2026-01-01",             # 授权起始日期
+    "end_date": "",                         # 授权截止日期 (永久授权为空)
+    "scope": [                              # 授权范围
+        "全部功能模块",
+        "成员系统数量 500",
+        "终端接入数 5",
+    ],
+    "licensee": "航电系统实验室",            # 授权主体(被授权单位)
+    "serial_number": "AHMU-0001",           # 设备序列号
+}
+
 # 仿真参数
 SIMULATION_CONFIG = {
     "member_system_count": 500,       # 成员系统数量

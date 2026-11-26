@@ -33,7 +33,7 @@ from app.services.comm_security import comm_security_service
 from app.services.equip_status import equip_status_service
 from app.core.icd_parser import icd_parser
 from app.core.arinc_mock import hardware
-from app.config import SIMULATION_CONFIG
+from app.config import SIMULATION_CONFIG, VERSION_CONFIG, LICENSE_CONFIG
 
 router = APIRouter(prefix="/api/v1")
 
@@ -67,6 +67,18 @@ async def get_system_status():
         "simulation_config": SIMULATION_CONFIG,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@router.get("/system/version")
+async def get_version():
+    """获取软件版本与构建信息"""
+    return {"status": "ok", "version": VERSION_CONFIG}
+
+
+@router.get("/system/license")
+async def get_license():
+    """获取软件授权信息"""
+    return {"status": "ok", "license": LICENSE_CONFIG}
 
 
 @router.get("/system/mode")

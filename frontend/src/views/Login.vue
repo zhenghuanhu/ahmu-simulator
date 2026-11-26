@@ -18,18 +18,50 @@
           {{ loading ? 'Logging in...' : 'Login' }}
         </button>
       </div>
+
+      <div class="login-version">
+        AHMU 仿真器 V{{ version }} · {{ statusText }}
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const loading = ref(false)
 const form = reactive({ username: 'TEST', password: '123456' })
+
+// 版本与授权信息 (登录页底部常驻展示)
+const version = ref('')
+const licenseStatus = ref('')
+const LICENSE_STATUS_TEXT = {
+  valid: '授权有效',
+  expiring: '授权即将过期',
+  expired: '授权已过期',
+  unlicensed: '未授权',
+  error: '授权异常',
+}
+const statusText = computed(() => LICENSE_STATUS_TEXT[licenseStatus.value] || '')
+
+const api = (path) => {
+  const port = window.location.port === '5173' ? '8443' : window.location.port
+  return `http://${window.location.hostname}:${port}${path}`
+}
+
+onMounted(() => {
+  fetch(api('/api/v1/system/version'))
+    .then(r => r.json())
+    .then(data => { if (data.version) version.value = data.version.version })
+    .catch(() => { /* 忽略 */ })
+  fetch(api('/api/v1/system/license'))
+    .then(r => r.json())
+    .then(data => { if (data.license) licenseStatus.value = data.license.license_status })
+    .catch(() => { /* 忽略 */ })
+})
 
 const handleLogin = async () => {
   if (!form.username || !form.password) {
@@ -120,6 +152,16 @@ const handleLogin = async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 24px;
+}
+
+.login-version {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #444444;
+  text-align: center;
+  color: #888888;
+  font-size: 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
 }
 
 .ohms-btn {

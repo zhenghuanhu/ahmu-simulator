@@ -190,6 +190,7 @@ const mainTabs = [
   { path: '/dashboard', label: 'CENTRAL MAINTENANCE', title: '系统总览' },
   { path: '/params', label: 'PARAMETER MONITORING', title: '参数监控' },
   { path: '/settings', label: 'SETTINGS', title: '配置' },
+  { path: '/about', label: 'ABOUT', title: '关于' },
   { path: '/login', label: 'LOGOUT', title: '退出' },
 ]
 

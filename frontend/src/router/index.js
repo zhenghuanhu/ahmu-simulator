@@ -29,6 +29,7 @@ const routes = [
       { path: 'commsecurity', name: 'CommSecurity', component: () => import('../views/CommSecurity.vue'), meta: { title: 'Comm Security' } },
       { path: 'icd', name: 'ICD', component: () => import('../views/ICDManagement.vue'), meta: { title: 'ICD' } },
       { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '配置' } },
+      { path: 'about', name: 'About', component: () => import('../views/About.vue'), meta: { title: '关于' } },
     ],
   },
 ]
