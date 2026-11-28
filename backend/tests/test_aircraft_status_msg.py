@@ -1,6 +1,6 @@
 """
-飞机状态消息功能测试 (基于《飞机事件信息.py》对向发送语义)
-================================================================
+飞机状态消息功能测试
+===================
 
 验证 AHMU 仿真器「飞机状态消息」功能的正确性, 覆盖四个维度:
 
@@ -19,11 +19,10 @@
   Part 2 (端到端, 需后端) —— 触发条件/流程 + 对向接收 + 边界
       P2.1  维护模式触发 → 回传 A664 帧阶段=15 + 终止标志=False
       P2.2  巡航模式触发 → 回传 A664 帧阶段=7
-      P2.3  事件参数交替 (FMS_IC_1_PARA 1↔0, 对齐 3 轮循环语义)
       P2.4  1Hz 周期发布 (连续两帧阶段稳定)
       P2.5  对向接收解析 (68 字节二进制帧 → unpack 字段合法)
       P2.6  边界: 空数据 (空 params 不崩溃, 用默认值回传)
-      P2.7  边界: 重复发送 (阶段稳定 + 事件报告不重复记录)
+      P2.7  边界: 重复发送 (阶段稳定)
       P2.8  边界: 异常字段 (airspeed="abc" 拒绝注入, 不崩溃)
 
 运行:
@@ -184,22 +183,6 @@ def backend_ready():
         return False
 
 
-def query_aircraft_status():
-    with urllib.request.urlopen(BASE + "/aircraft-status", timeout=10) as r:
-        return json.loads(r.read().decode())
-
-
-def count_event_reports():
-    """查询 EventReport 表中 fms_ic_1_para_change 记录数 (供重复发送去重校验)"""
-    from app.database import SessionLocal, EventReport
-    db = SessionLocal()
-    try:
-        return db.query(EventReport).filter(
-            EventReport.event_type == "fms_ic_1_para_change").count()
-    finally:
-        db.close()
-
-
 def clear_socket(sock):
     sock.settimeout(0.05)
     try:
@@ -209,11 +192,11 @@ def clear_socket(sock):
         pass
 
 
-def recv_after_send(sender, params, fms=None, wait=1.6):
-    """发送事件并等待 A664 帧回传 (清残留, 只读最新)"""
+def recv_after_send(sender, params, wait=1.6):
+    """发送参数并等待 A664 帧回传 (清残留, 只读最新)"""
     clear_socket(sender.sock)
     sender.sock.settimeout(5.0)
-    sender.send_event(params, fms_ic_1_para=fms)
+    sender.send_event(params)
     time.sleep(wait)
     return sender.recv_status()
 
@@ -230,31 +213,21 @@ def part2_e2e(r: ResultCollector):
     sender = AircraftEventSender()
     try:
         # P2.1 维护模式触发 → 阶段=15 + 终止=False
-        print("\n[P2.1] 维护模式触发 (FMS_IC_1_PARA=1)")
-        msg = recv_after_send(sender, build_params("maintenance"), 1)
+        print("\n[P2.1] 维护模式触发")
+        msg = recv_after_send(sender, build_params("maintenance"))
         ok = msg.get("flight_phase") == 15 and msg.get("global_abort_flag") is False
         r.check(ok, "P2.1 维护模式 → 阶段15 + 终止标志False",
                 f"phase={msg.get('flight_phase')} abort={msg.get('global_abort_flag')}")
 
         # P2.2 巡航模式触发 → 阶段=7
         print("\n[P2.2] 巡航模式触发")
-        msg = recv_after_send(sender, build_params("cruise"), 1)
+        msg = recv_after_send(sender, build_params("cruise"))
         r.check(msg.get("flight_phase") == 7, "P2.2 巡航模式 → 阶段7",
                 f"phase={msg.get('flight_phase')}")
 
-        # P2.3 事件参数交替 (1→0→1, 对齐 3 轮循环语义)
-        print("\n[P2.3] 事件参数交替 (FMS_IC_1_PARA 1→0→1)")
-        ok = True
-        for expect in (1, 0, 1):
-            recv_after_send(sender, build_params("maintenance"), expect)
-            ep = query_aircraft_status().get("message", {}).get("event_params", {})
-            if ep.get("fms_ic_1_para") != expect:
-                ok = False
-        r.check(ok, "P2.3 事件参数交替 1↔0 与注入值一致", f"最终 event_params={ep}")
-
         # P2.4 1Hz 周期发布 (连续两帧阶段稳定)
         print("\n[P2.4] 1Hz 周期发布 (连续两帧)")
-        recv_after_send(sender, build_params("maintenance"), 1)
+        recv_after_send(sender, build_params("maintenance"))
         clear_socket(sender.sock)
         sender.sock.settimeout(5.0)
         f1 = sender.recv_status()
@@ -264,7 +237,7 @@ def part2_e2e(r: ResultCollector):
 
         # P2.5 对向接收解析 (68 字节二进制帧字段合法)
         print("\n[P2.5] 对向接收解析 (二进制帧字段合法性)")
-        recv_after_send(sender, build_params("maintenance"), 1)
+        recv_after_send(sender, build_params("maintenance"))
         clear_socket(sender.sock)
         sender.sock.settimeout(5.0)
         d = sender.recv_status()
@@ -276,26 +249,24 @@ def part2_e2e(r: ResultCollector):
 
         # P2.6 边界: 空数据
         print("\n[P2.6] 边界: 空数据 (空 params)")
-        msg = recv_after_send(sender, {}, None)
+        msg = recv_after_send(sender, {})
         ok = msg.get("flight_phase") is not None
         r.check(ok, "P2.6 空数据不崩溃, 用默认值回传", f"phase={msg.get('flight_phase')}")
 
-        # P2.7 边界: 重复发送 (阶段稳定 + 事件报告不重复记录)
+        # P2.7 边界: 重复发送 (阶段稳定)
         print("\n[P2.7] 边界: 重复发送")
-        before = count_event_reports()
         for _ in range(3):
-            recv_after_send(sender, build_params("maintenance"), 1)
-        after = count_event_reports()
-        msg = recv_after_send(sender, build_params("maintenance"), 1)
-        r.check(after == before and msg.get("flight_phase") == 15,
-                "P2.7 重复发送阶段稳定 + 事件报告不重复",
-                f"EventReport {before}->{after}, phase={msg.get('flight_phase')}")
+            recv_after_send(sender, build_params("maintenance"))
+        msg = recv_after_send(sender, build_params("maintenance"))
+        r.check(msg.get("flight_phase") == 15,
+                "P2.7 重复发送阶段稳定",
+                f"phase={msg.get('flight_phase')}")
 
         # P2.8 边界: 异常字段 (airspeed="abc" 拒绝注入不崩溃)
         print("\n[P2.8] 边界: 异常字段 (airspeed=\"abc\")")
         bad = dict(build_params("cruise"))
         bad["airspeed"] = "abc"
-        msg = recv_after_send(sender, bad, 1)
+        msg = recv_after_send(sender, bad)
         ok = msg.get("flight_phase") is not None
         r.check(ok, "P2.8 异常数值字段拒绝注入, 不崩溃", f"phase={msg.get('flight_phase')}")
     finally:
@@ -311,7 +282,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 64)
-    print("飞机状态消息功能测试 (基于《飞机事件信息.py》对向发送语义)")
+    print("飞机状态消息功能测试")
     print("=" * 64)
 
     r = ResultCollector()

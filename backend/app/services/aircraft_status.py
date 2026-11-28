@@ -45,7 +45,7 @@ from enum import Enum
 from typing import Optional, Tuple
 from loguru import logger
 
-from app.database import SessionLocal, AircraftStatusRecord, EventReport
+from app.database import SessionLocal, AircraftStatusRecord
 from app.core.websocket_manager import ws_manager
 from app.core.icd_aircraft_status import pack_aircraft_status
 from app.config import AIRCRAFT_STATUS_CONFIG, AIRCRAFT_STATUS_RX_CONFIG
@@ -157,7 +157,7 @@ class AircraftStatusService:
         # 最新消息缓存 (供查询)
         self._latest_message: dict = {}
 
-        # 飞机事件信息 接收/回传通道 (Mock UDP 模拟 A664)
+        # 参数信号 接收/回传通道 (Mock UDP 模拟 A664)
         rx_cfg = AIRCRAFT_STATUS_RX_CONFIG
         self._rx_host = rx_cfg["recv_host"]
         self._rx_port = rx_cfg["recv_port"]
@@ -165,10 +165,6 @@ class AircraftStatusService:
         self._rx_sock: Optional[socket.socket] = None
         self._send_sock: Optional[socket.socket] = None
 
-        # 事件关联参数 (飞机事件信息中的事件参数, 如 FMS_IC_1_PARA)
-        self._event_params: dict[str, object] = {
-            p: 0 for p in rx_cfg.get("event_params", ["fms_ic_1_para"])
-        }
         self._received_utc_time: Optional[str] = None   # 接收到的 UTC_TIME (缺省用系统时间)
 
         # 变化检测: 记录上一周期 (phase, leg) 用于节流写库
@@ -181,7 +177,7 @@ class AircraftStatusService:
         self._setup_udp_sockets()
         asyncio.create_task(self._publish_loop())
         asyncio.create_task(self._rx_loop())
-        logger.info("飞机状态消息服务已启动 (1Hz 发布 + 飞机事件信息接收)")
+        logger.info("飞机状态消息服务已启动 (1Hz 发布 + 参数信号接收)")
 
     async def stop(self):
         self._running = False
@@ -191,7 +187,7 @@ class AircraftStatusService:
     # ==================== UDP 收发 (Mock A664) ====================
 
     def _setup_udp_sockets(self):
-        """创建 UDP 收发 socket (Mock A664 模拟飞机事件信息收发)"""
+        """创建 UDP 收发 socket (Mock A664 模拟参数信号收发)"""
         try:
             self._rx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._rx_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -215,7 +211,7 @@ class AircraftStatusService:
         self._send_sock = None
 
     async def _rx_loop(self):
-        """UDP 接收循环: 接收飞机事件信息, 解码参数并注入"""
+        """UDP 接收循环: 接收参数信号, 解码并注入"""
         loop = asyncio.get_event_loop()
         while self._running and self._rx_sock:
             try:
@@ -249,11 +245,11 @@ class AircraftStatusService:
         return value
 
     def _handle_rx_message(self, data: bytes, addr):
-        """处理接收到的飞机事件信息 (Mock JSON): 解码参数并注入"""
+        """处理接收到的参数信号 (Mock JSON): 解码并注入"""
         try:
             msg = json.loads(data.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
-            logger.warning(f"[AircraftStatus] 无法解析飞机事件信息: {data[:80]!r}")
+            logger.warning(f"[AircraftStatus] 无法解析参数信号: {data[:80]!r}")
             return
         if not isinstance(msg, dict):
             return
@@ -266,16 +262,8 @@ class AircraftStatusService:
                 if name in self._params:
                     # 双源参数: 注入左源 (valid=True), 枚举/数值归一化 (异常值拒绝注入)
                     self._inject_param(name, value, "left", True)
-                elif name in self._event_params:
-                    # 事件关联参数
-                    self._event_params[name] = value
 
-        # 2. 事件参数 (顶层或 params 内)
-        for p in self._event_params:
-            if p in msg:
-                self._event_params[p] = msg[p]
-
-        # 3. UTC 时间 (由测试端提供)
+        # 2. UTC 时间 (由测试端提供)
         if msg.get("utc_time"):
             self._received_utc_time = str(msg["utc_time"])
 
@@ -285,42 +273,7 @@ class AircraftStatusService:
             if key in msg:
                 self._identity[key] = str(msg[key])
 
-        # 5. 事件参数变化 -> 记录事件报告 (飞机状态监测事件)
-        self._record_event_if_changed()
-        logger.debug(f"[AircraftStatus] 收到飞机事件信息: params={list(params.keys()) if isinstance(params, dict) else '?'} "
-                     f"事件参数={self._event_params}")
-
-    def _record_event_if_changed(self):
-        """事件参数 (FMS_IC_1_PARA) 变化时写入 EventReport 事件报告"""
-        fms = self._event_params.get("fms_ic_1_para")
-        if fms is None:
-            return
-        db = SessionLocal()
-        try:
-            last = db.query(EventReport).filter(
-                EventReport.event_type == "fms_ic_1_para_change"
-            ).order_by(EventReport.created_at.desc()).first()
-            prev = None
-            if last and last.description:
-                try:
-                    prev = json.loads(last.description).get("value")
-                except (ValueError, TypeError):
-                    prev = None
-            if prev == fms:
-                return  # 未变化, 不重复记录
-            db.add(EventReport(
-                event_type="fms_ic_1_para_change",
-                member_system="FMS_IC_1",
-                description=json.dumps({"value": fms}, ensure_ascii=False),
-                related_params=json.dumps(self._event_params, ensure_ascii=False),
-            ))
-            db.commit()
-            logger.info(f"[AircraftStatus] 事件参数 FMS_IC_1_PARA 变化: {prev} -> {fms}")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"[AircraftStatus] 事件报告记录失败: {e}")
-        finally:
-            db.close()
+        logger.debug(f"[AircraftStatus] 收到参数信号: params={list(params.keys()) if isinstance(params, dict) else '?'}")
 
     # ==================== 信号接收接口 ====================
 
@@ -545,7 +498,6 @@ class AircraftStatusService:
             "params": {k: {"value": v["value"], "valid": v["valid"], "source": v["source"]}
                        for k, v in eff.items()},
             "phase_degraded": key_degraded,                      # 关键参数双源失效导致阶段降级
-            "event_params": dict(self._event_params),            # 事件关联参数 (FMS_IC_1_PARA 等)
             "timestamp": now.isoformat(),
         }
         self._latest_message = message
@@ -604,7 +556,7 @@ class AircraftStatusService:
     def _send_status_message(self, message: dict):
         """通过 UDP 回传 A664 飞机状态消息 (68 字节二进制帧) 给测试端/对向端
 
-        对齐《飞机事件信息.py》: 对向端经 AFDX 接收 68 字节 Aircraft_Status_Msg 二进制帧
+        对齐对向测试端: 对向端经 AFDX 接收 68 字节 Aircraft_Status_Msg 二进制帧
         (而非 JSON), 由 e_icd 解码后经 check_air_status_massage_para 校验阶段/终止标志/UTC 等。
         """
         if not self._send_sock:
