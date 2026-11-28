@@ -49,7 +49,7 @@ from app.core.icd_aircraft_status import (  # noqa: E402
 
 # 飞行阶段映射 (对齐 ETest __get_event_chase_number)
 FLIGHT_PHASES = {
-    1: "power_on", 2: "engine_start", 3: "taxi_off", 4: "takeoff_roll",
+    1: "power_on", 2: "engine_start", 3: "taxi_out", 4: "takeoff_roll",
     5: "initial_climb", 6: "climb", 7: "cruise", 8: "descent",
     9: "approach", 10: "go_around", 11: "flare", 12: "rollout",
     13: "taxi_in", 14: "engine_shutdown", 15: "maintenance",

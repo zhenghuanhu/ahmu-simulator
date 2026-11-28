@@ -22,7 +22,7 @@
     ./venv/Scripts/python.exe tests/simulate_aircraft_status_sender.py --quiet
 
 飞行阶段 (数字 1~15 或名称):
-    1 power_on / 2 engine_start / 3 taxi_off / 4 takeoff_roll / 5 initial_climb
+    1 power_on / 2 engine_start / 3 taxi_out / 4 takeoff_roll / 5 initial_climb
     6 climb / 7 cruise / 8 descent / 9 approach / 10 go_around / 11 flare
     12 rollout / 13 taxi_in / 14 engine_shutdown / 15 maintenance
 """
@@ -39,7 +39,7 @@ DEFAULT_BASE = "http://127.0.0.1:8443/api/v1"
 
 # 飞行阶段映射 (对齐 ETest __get_event_chase_number)
 FLIGHT_PHASES = {
-    1: "power_on", 2: "engine_start", 3: "taxi_off", 4: "takeoff_roll",
+    1: "power_on", 2: "engine_start", 3: "taxi_out", 4: "takeoff_roll",
     5: "initial_climb", 6: "climb", 7: "cruise", 8: "descent",
     9: "approach", 10: "go_around", 11: "flare", 12: "rollout",
     13: "taxi_in", 14: "engine_shutdown", 15: "maintenance",

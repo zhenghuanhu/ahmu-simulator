@@ -16,7 +16,7 @@
 
 消息格式与字段含义 (梳理自 public_function.py / __get_event_chase_number):
   - flight_phase (飞行阶段, 1~15): 维护模式判定的直接依据
-      {1: power_on, 2: engine_start, 3: taxi_off, 4: takeoff_roll, 5: initial_climb,
+      {1: power_on, 2: engine_start, 3: taxi_out, 4: takeoff_roll, 5: initial_climb,
        6: climb, 7: cruise, 8: descent, 9: approach, 10: go_around, 11: flare,
        12: rollout, 13: taxi_in, 14: engine_shutdown, 15: maintenance}
   - global_abort_flag (全局终止标志): maintenance 阶段=False, 其它阶段=True
@@ -50,7 +50,7 @@ from app.services.maintenance_mode import maintenance_service, SystemMode
 FLIGHT_PHASE_NAMES = {
     1: "power_on",
     2: "engine_start",
-    3: "taxi_off",
+    3: "taxi_out",
     4: "takeoff_roll",
     5: "initial_climb",
     6: "climb",

@@ -22,7 +22,7 @@
 飞行阶段判定逻辑计算表 (1~15, 对齐 ETest __get_event_chase_number):
   1  power_on 上电           空地=地 & 油门≤怠速 & 空速<滑行阈值 (初始)
   2  engine_start 发动机启动  空地=地 & 怠速<油门<起飞推力
-  3  taxi_off 滑出           空地=地 & 地速>滑行阈值 & 空速<滑行阈值 & 刹车释放
+  3  taxi_out 滑出           空地=地 & 地速>滑行阈值 & 空速<滑行阈值 & 刹车释放
   4  takeoff_roll 起飞滑跑    空地=地 & 油门≥起飞推力 & 空速<离地速度
   5  initial_climb 初始爬升   空地=空 & 空速≥离地速度 & 高度变化率>0
   6  climb 爬升              空地=空 & 高度变化率>爬升阈值 & 高度<巡航高度
@@ -55,7 +55,7 @@ class FlightPhase(int, Enum):
     """飞行阶段 1~15 (对齐 ETest __get_event_chase_number)"""
     POWER_ON = 1          # power_on 上电
     ENGINE_START = 2      # engine_start 发动机启动
-    TAXI_OFF = 3          # taxi_off 滑出
+    TAXI_OUT = 3          # taxi_out 滑出
     TAKEOFF_ROLL = 4      # takeoff_roll 起飞滑跑
     INITIAL_CLIMB = 5     # initial_climb 初始爬升
     CLIMB = 6             # climb 爬升
@@ -71,7 +71,7 @@ class FlightPhase(int, Enum):
 
 
 PHASE_NAMES = {
-    1: "power_on", 2: "engine_start", 3: "taxi_off", 4: "takeoff_roll",
+    1: "power_on", 2: "engine_start", 3: "taxi_out", 4: "takeoff_roll",
     5: "initial_climb", 6: "climb", 7: "cruise", 8: "descent",
     9: "approach", 10: "go_around", 11: "flare", 12: "rollout",
     13: "taxi_in", 14: "engine_shutdown", 15: "maintenance",
@@ -417,7 +417,7 @@ class AircraftStatusService:
                 if self._prev_phase in (FlightPhase.ROLLOUT.value, FlightPhase.APPROACH.value,
                                         FlightPhase.FLARE.value, FlightPhase.DESCENT.value):
                     return FlightPhase.TAXI_IN.value  # 13 滑入
-                return FlightPhase.TAXI_OFF.value     # 3 滑出
+                return FlightPhase.TAXI_OUT.value     # 3 滑出
             # 发动机启动: 怠速<油门<起飞推力
             if thrust > thr["thrust_idle"] and thrust < thr["thrust_takeoff"]:
                 return FlightPhase.ENGINE_START.value  # 2 发动机启动
@@ -436,7 +436,7 @@ class AircraftStatusService:
         """航段管理: 起飞滑跑(进入新起飞)时航段递增, 范围 -128~127 循环"""
         # 从地面滑行/上电/发动机启动进入起飞滑跑, 视为新航段开始
         if (new_phase == FlightPhase.TAKEOFF_ROLL.value
-                and self._prev_phase in (FlightPhase.TAXI_OFF.value, FlightPhase.POWER_ON.value,
+                and self._prev_phase in (FlightPhase.TAXI_OUT.value, FlightPhase.POWER_ON.value,
                                          FlightPhase.ENGINE_START.value)):
             self._flight_leg += 1
             if self._flight_leg > 127:
